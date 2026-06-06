@@ -6,6 +6,9 @@ extension Adjustments.RootView {
         if state.isOverrideEnabled, state.activeOverrideName.isNotEmpty {
             currentActiveAdjustment
         }
+        if !state.scheduledOverrides.isEmpty {
+            scheduledOverridesSection
+        }
         if state.overridePresets.isNotEmpty {
             overridePresets
         } else {
@@ -103,6 +106,15 @@ extension Adjustments.RootView {
                 Label("Edit", systemImage: "pencil")
                     .tint(.blue)
             })
+            Button {
+                selectedOverride = preset
+                state.showOverrideEditSheet = true
+            } label: {
+                Label(
+                    String(localized: "Schedule"),
+                    systemImage: "clock"
+                )
+            }
         }
     }
 
@@ -245,6 +257,35 @@ extension Adjustments.RootView {
                         .foregroundStyle(.secondary)
                 }
             }
+        }
+    }
+
+    private var scheduledOverridesSection: some View {
+        Section {
+            ForEach(state.scheduledOverrides) { override in
+                HStack {
+                    Text(override.name ?? "Scheduled Override")
+                    Spacer()
+                    if let date = override.date {
+                        Text("Starts in \(formattedTimeRemaining(date.timeIntervalSinceNow))")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                    }
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        Task { await state.cancelScheduledOverride(override.objectID) }
+                    } label: {
+                        Label(
+                            String(localized: "Cancel"),
+                            systemImage: "xmark.circle.fill"
+                        )
+                    }
+                }
+            }
+            .listRowBackground(Color.chart)
+        } header: {
+            Text("Scheduled Overrides")
         }
     }
 }

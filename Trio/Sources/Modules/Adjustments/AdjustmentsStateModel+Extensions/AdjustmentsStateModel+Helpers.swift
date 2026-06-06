@@ -68,6 +68,16 @@ extension Adjustments.StateModel {
         let totalMinutes = (hours * 60) + minutes
         return Decimal(max(0, totalMinutes))
     }
+
+    /// Waits until a target date before proceeding.
+    /// Wakes every 60 seconds to check; wakes sooner if the target is near.
+    func waitUntilDate(_ targetDate: Date) async {
+        while Date() < targetDate {
+            let timeInterval = targetDate.timeIntervalSince(Date())
+            let sleepDuration = min(timeInterval, 60.0)
+            try? await Task.sleep(nanoseconds: UInt64(sleepDuration * 1_000_000_000))
+        }
+    }
 }
 
 extension PickerSettingsProvider {

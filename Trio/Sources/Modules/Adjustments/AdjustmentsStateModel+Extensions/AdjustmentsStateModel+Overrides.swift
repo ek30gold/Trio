@@ -2,6 +2,7 @@ import Combine
 import CoreData
 import Foundation
 import SwiftUI
+import UserNotifications
 
 extension Adjustments.StateModel {
     // MARK: - Enact Overrides
@@ -370,6 +371,117 @@ extension Adjustments.StateModel {
         }
 
         return percentage
+    }
+
+    func setupScheduledOverridesArray() {
+        Task {
+            do {
+                let ids = try await overrideStorage.fetchScheduledOverrides()
+                await updateScheduledOverridesArray(with: ids)
+            } catch {
+                debug(.default, "\(DebuggingIdentifiers.failed) Failed to setup scheduled overrides: \(error)")
+            }
+        }
+    }
+
+    @MainActor private func updateScheduledOverridesArray(with IDs: [NSManagedObjectID]) async {
+        do {
+            let overrideObjects = try IDs.compactMap { id in
+                try viewContext.existingObject(with: id) as? OverrideStored
+            }
+            scheduledOverrides = overrideObjects
+        } catch {
+            debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to extract scheduled overrides: \(error)")
+        }
+    }
+
+    func scheduleOverride(objectID: NSManagedObjectID, for scheduledDate: Date) {
+        guard scheduledDate > Date(),
+              scheduledDate <= Date().addingTimeInterval(72 * 3600) else {
+            debug(.default, "\(DebuggingIdentifiers.failed) Scheduled date out of valid range.")
+            return
+        }
+        scheduledOverrideTask?.cancel()
+        scheduledOverrideTask = Task {
+            await waitUntilDate(scheduledDate)
+            guard !Task.isCancelled else { return }
+            await activateScheduledOverride(for: scheduledDate)
+        }
+        setupScheduledOverridesArray()
+    }
+
+    func activateScheduledOverride(for date: Date) async {
+        do {
+            let ids = try await overrideStorage.fetchScheduledOverride(for: date)
+            guard let firstID = ids.first else {
+                debug(.default, "\(DebuggingIdentifiers.failed) No scheduled override found for the specified date.")
+                return
+            }
+
+            var overrideName: String = ""
+
+            await disableAllActiveOverrides(createOverrideRunEntry: currentActiveOverride != nil)
+
+            try await MainActor.run {
+                guard let override = try viewContext.existingObject(with: firstID) as? OverrideStored else { return }
+                overrideName = override.name ?? ""
+                override.enabled = true
+                override.date = Date()
+                override.isUploadedToNS = false
+                isOverrideEnabled = true
+                try viewContext.save()
+            }
+
+            setupScheduledOverridesArray()
+            updateLatestOverrideConfiguration()
+            await sendScheduledOverrideActivationNotification(name: overrideName)
+        } catch {
+            debug(.default, "\(DebuggingIdentifiers.failed) Failed to activate scheduled override: \(error)")
+        }
+    }
+
+    func cancelScheduledOverride(_ objectID: NSManagedObjectID) async {
+        scheduledOverrideTask?.cancel()
+        scheduledOverrideTask = nil
+        await overrideStorage.deleteOverridePreset(objectID)
+        setupScheduledOverridesArray()
+    }
+
+    func restartPendingScheduledOverrideTask() {
+        Task {
+            do {
+                let ids = try await overrideStorage.fetchScheduledOverrides()
+                guard let firstID = ids.first,
+                      let override = try? viewContext.existingObject(with: firstID) as? OverrideStored,
+                      let scheduledDate = override.date,
+                      scheduledDate > Date() else { return }
+
+                scheduledOverrideTask?.cancel()
+                scheduledOverrideTask = Task {
+                    await waitUntilDate(scheduledDate)
+                    guard !Task.isCancelled else { return }
+                    await activateScheduledOverride(for: scheduledDate)
+                }
+            } catch {
+                debug(.default, "\(DebuggingIdentifiers.failed) Failed to restart pending scheduled override task: \(error)")
+            }
+        }
+    }
+
+    private func sendScheduledOverrideActivationNotification(name: String) async {
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "Override Active")
+        content.body = String(localized: "\(name) has started.")
+        content.sound = .default
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: "scheduledOverrideActivation",
+            content: content,
+            trigger: trigger
+        )
+
+        try? await UNUserNotificationCenter.current().add(request)
     }
 }
 

@@ -196,15 +196,6 @@ extension Adjustments.StateModel {
         }
     }
 
-    /// Waits until a target date before proceeding.
-    private func waitUntilDate(_ targetDate: Date) async {
-        while Date() < targetDate {
-            let timeInterval = targetDate.timeIntervalSince(Date())
-            let sleepDuration = min(timeInterval, 60.0)
-            try? await Task.sleep(nanoseconds: UInt64(sleepDuration * 1_000_000_000))
-        }
-    }
-
     /// Saves a custom Temp Target and disables existing ones.
     func saveCustomTempTarget() async throws {
         await disableAllActiveTempTargets(createTempTargetRunEntry: true)

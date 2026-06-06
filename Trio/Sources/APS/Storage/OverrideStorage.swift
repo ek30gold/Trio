@@ -19,6 +19,8 @@ protocol OverrideStorage {
     ) async throws
     func getPresetOverridesForNightscout() async throws -> [NightscoutPresetOverride]
     func fetchLatestActiveOverride() async throws -> NSManagedObjectID?
+    func fetchScheduledOverrides() async throws -> [NSManagedObjectID]
+    func fetchScheduledOverride(for date: Date) async throws -> [NSManagedObjectID]
 }
 
 final class BaseOverrideStorage: @preconcurrency OverrideStorage, Injectable {
@@ -405,6 +407,53 @@ final class BaseOverrideStorage: @preconcurrency OverrideStorage, Injectable {
             }
 
             return fetchedResults.first?.objectID
+        }
+    }
+
+    func fetchScheduledOverrides() async throws -> [NSManagedObjectID] {
+        let results = try await CoreDataStack.shared.fetchEntitiesAsync(
+            ofType: OverrideStored.self,
+            onContext: context,
+            predicate: NSPredicate(
+                format: "enabled == %@ AND isPreset == %@ AND date > %@",
+                false as NSNumber,
+                false as NSNumber,
+                Date() as NSDate
+            ),
+            key: "date",
+            ascending: true
+        )
+        return try await context.perform {
+            guard let fetchedResults = results as? [OverrideStored] else {
+                throw CoreDataError.fetchError(function: #function, file: #file)
+            }
+            return fetchedResults.map(\.objectID)
+        }
+    }
+
+    func fetchScheduledOverride(for date: Date) async throws -> [NSManagedObjectID] {
+        let tolerance: TimeInterval = 1.0
+        let lower = date.addingTimeInterval(-tolerance)
+        let upper = date.addingTimeInterval(tolerance)
+        let results = try await CoreDataStack.shared.fetchEntitiesAsync(
+            ofType: OverrideStored.self,
+            onContext: context,
+            predicate: NSPredicate(
+                format: "enabled == %@ AND isPreset == %@ AND date >= %@ AND date <= %@",
+                false as NSNumber,
+                false as NSNumber,
+                lower as NSDate,
+                upper as NSDate
+            ),
+            key: "date",
+            ascending: false,
+            fetchLimit: 1
+        )
+        return try await context.perform {
+            guard let fetchedResults = results as? [OverrideStored] else {
+                throw CoreDataError.fetchError(function: #function, file: #file)
+            }
+            return fetchedResults.map(\.objectID)
         }
     }
 }

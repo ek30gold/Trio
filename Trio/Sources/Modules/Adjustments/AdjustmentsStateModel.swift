@@ -30,6 +30,8 @@ extension Adjustments {
         var overrideName: String = ""
         var isPreset: Bool = false
         var overridePresets: [OverrideStored] = []
+        var scheduledOverrides: [OverrideStored] = []
+        var scheduledOverrideTask: Task<Void, Never>? = nil
         var advancedSettings: Bool = false
         var isfAndCr: Bool = true
         var isf: Bool = true
@@ -95,6 +97,8 @@ extension Adjustments {
                     group.addTask { self.setupTempTargetPresetsArray() }
                     group.addTask { self.updateLatestOverrideConfiguration() }
                     group.addTask { self.updateLatestTempTargetConfiguration() }
+                    group.addTask { self.setupScheduledOverridesArray() }
+                    group.addTask { self.restartPendingScheduledOverrideTask() }
                 }
             }
         }

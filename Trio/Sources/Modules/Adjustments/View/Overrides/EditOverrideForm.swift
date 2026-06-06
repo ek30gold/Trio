@@ -26,6 +26,7 @@ struct EditOverrideForm: View {
     @State private var selectedIsfCrOption: IsfAndOrCrOptions
     @State private var selectedDisableSmbOption: DisableSmbOptions
     @State private var hasChanges = false
+    @State private var scheduledDate: Date = Date()
     @State private var isEditing = false
     @State private var target_override = false
     @State private var percentageStep: Int = 1
@@ -495,6 +496,15 @@ struct EditOverrideForm: View {
                 }
             }
             .listRowBackground(Color.chart)
+
+            Section(header: Text("Schedule Override")) {
+                DatePicker(
+                    String(localized: "Start Time"),
+                    selection: $scheduledDate,
+                    in: Date().addingTimeInterval(60)...Date().addingTimeInterval(72 * 3600),
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+            }
         }
     }
 
@@ -545,6 +555,26 @@ struct EditOverrideForm: View {
                     .disabled(isInvalid) // Disable button if changes are invalid
                     .frame(maxWidth: .infinity, alignment: .center)
                     .tint(.white)
+                Button(action: {
+                    saveChanges()
+                    override.enabled = false
+                    override.date = scheduledDate
+
+                    Task {
+                        do {
+                            guard let moc = override.managedObjectContext else { return }
+                            guard moc.hasChanges else { return }
+                            try moc.save()
+                            state.scheduleOverride(objectID: override.objectID, for: scheduledDate)
+                            presentationMode.wrappedValue.dismiss()
+                        } catch {
+                            debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to schedule override")
+                        }
+                    }
+                }, label: {
+                    Text("Schedule Override")
+                })
+                .disabled(scheduledDate <= Date())
             }
         )
         .listRowBackground(isInvalid ? Color(.systemGray4) : Color(.systemBlue))
