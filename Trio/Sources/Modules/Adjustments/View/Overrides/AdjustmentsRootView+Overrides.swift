@@ -262,30 +262,33 @@ extension Adjustments.RootView {
 
     private var scheduledOverridesSection: some View {
         Section {
-            ForEach(state.scheduledOverrides) { override in
-                HStack {
-                    Text(override.name ?? "Scheduled Override")
-                    Spacer()
-                    if let date = override.date {
-                        Text("Starts in \(formattedTimeRemaining(date.timeIntervalSinceNow))")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
-                    }
+            HStack {
+                Text(
+                    "\(state.scheduledOverrides.first?.name ?? "Override") is scheduled for \(formattedScheduledTime())"
+                )
+                Spacer()
+                Button {
+                    Task { await state.cancelScheduledOverride(state.scheduledOverrides.first!.objectID) }
+                } label: {
+                    Text("Cancel Future Override")
+                        .foregroundStyle(Color.primary)
                 }
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    Button(role: .destructive) {
-                        Task { await state.cancelScheduledOverride(override.objectID) }
-                    } label: {
-                        Label(
-                            String(localized: "Cancel"),
-                            systemImage: "xmark.circle.fill"
-                        )
-                    }
-                }
+                .buttonStyle(.plain)
             }
-            .listRowBackground(Color.chart)
-        } header: {
-            Text("Scheduled Overrides")
+            .contentShape(Rectangle())
+            .onTapGesture {
+                selectedOverride = state.scheduledOverrides.first
+                state.showOverrideEditSheet = true
+            }
         }
+        .listRowBackground(Color.purple.opacity(0.8))
+    }
+
+    private func formattedScheduledTime() -> String {
+        guard let date = state.scheduledOverrides.first?.date else { return "" }
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return formatter.string(from: date)
     }
 }
