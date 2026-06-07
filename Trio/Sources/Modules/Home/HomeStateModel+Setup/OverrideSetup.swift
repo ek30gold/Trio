@@ -16,6 +16,7 @@ extension Home.StateModel {
                 debug(.default, "Unexpected error in setupOverrides: \(error)")
             }
         }
+        fetchScheduledOverrides()
     }
 
     private func fetchOverrides() async throws -> [NSManagedObjectID] {
@@ -37,6 +38,32 @@ extension Home.StateModel {
 
     @MainActor private func updateOverrideArray(with objects: [OverrideStored]) {
         overrides = objects
+    }
+
+    func fetchScheduledOverrides() {
+        Task {
+            do {
+                let results = try await CoreDataStack.shared.fetchEntitiesAsync(
+                    ofType: OverrideStored.self,
+                    onContext: overrideFetchContext,
+                    predicate: NSPredicate(
+                        format: "enabled == %@ AND isPreset == %@ AND date > %@",
+                        false as NSNumber,
+                        false as NSNumber,
+                        Date() as NSDate
+                    ),
+                    key: "date",
+                    ascending: true
+                )
+                await updateScheduledOverrides(with: results)
+            } catch {
+                debug(.default, "\(DebuggingIdentifiers.failed) Failed to fetch scheduled overrides: \(error)")
+            }
+        }
+    }
+
+    @MainActor private func updateScheduledOverrides(with results: [NSManagedObject]) async {
+        scheduledOverrides = results.compactMap { $0 as? OverrideStored }
     }
 
     // Setup expired Overrides
