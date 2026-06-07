@@ -51,6 +51,7 @@ extension Adjustments {
         var currentActiveTempTarget: TempTargetStored?
         var showOverrideEditSheet = false
         var showTempTargetEditSheet = false
+        var showScheduledOverrideToast: Bool = false
         var units: GlucoseUnits = .mgdL
 
         // Temp Target Properties

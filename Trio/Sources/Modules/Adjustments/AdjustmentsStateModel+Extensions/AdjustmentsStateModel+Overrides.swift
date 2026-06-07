@@ -408,6 +408,11 @@ extension Adjustments.StateModel {
             await activateScheduledOverride(for: scheduledDate)
         }
         setupScheduledOverridesArray()
+        Task { @MainActor in
+            showScheduledOverrideToast = true
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            showScheduledOverrideToast = false
+        }
     }
 
     func activateScheduledOverride(for date: Date) async {

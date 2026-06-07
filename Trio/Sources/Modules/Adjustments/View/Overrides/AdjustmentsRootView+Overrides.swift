@@ -3,17 +3,40 @@ import SwiftUI
 
 extension Adjustments.RootView {
     @ViewBuilder func overrides() -> some View {
-        if state.isOverrideEnabled, state.activeOverrideName.isNotEmpty {
-            currentActiveAdjustment
+        Group {
+            if state.isOverrideEnabled, state.activeOverrideName.isNotEmpty {
+                currentActiveAdjustment
+            }
+            if !state.scheduledOverrides.isEmpty {
+                scheduledOverrideBanner
+                scheduledOverridesSection
+            }
+            if state.overridePresets.isNotEmpty {
+                overridePresets
+            } else {
+                defaultText
+            }
         }
-        if !state.scheduledOverrides.isEmpty {
-            scheduledOverrideBanner
-            scheduledOverridesSection
-        }
-        if state.overridePresets.isNotEmpty {
-            overridePresets
-        } else {
-            defaultText
+        .popup(
+            isPresented: state.showScheduledOverrideToast,
+            alignment: .center,
+            direction: .top
+        ) {
+            HStack(spacing: 8) {
+                Image(systemName: "clock.badge.checkmark")
+                    .font(.body)
+                Text(String(localized: "Override scheduled"))
+                    .font(.body)
+                    .bold()
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.purple.opacity(0.9))
+            )
+            .padding(.top, 8)
         }
     }
 
