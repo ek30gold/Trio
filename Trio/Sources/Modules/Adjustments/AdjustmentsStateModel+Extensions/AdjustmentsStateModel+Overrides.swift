@@ -408,6 +408,15 @@ extension Adjustments.StateModel {
             await activateScheduledOverride(for: scheduledDate)
         }
         setupScheduledOverridesArray()
+        let overrideName: String
+        if let override = try? viewContext.existingObject(with: objectID) as? OverrideStored {
+            overrideName = override.name ?? ""
+        } else {
+            overrideName = ""
+        }
+        Task {
+            await sendScheduledOverrideActivationNotification(name: overrideName, scheduledDate: scheduledDate)
+        }
         Task { @MainActor in
             showScheduledOverrideToast = true
             try? await Task.sleep(nanoseconds: 3_000_000_000)
@@ -439,7 +448,6 @@ extension Adjustments.StateModel {
 
             setupScheduledOverridesArray()
             updateLatestOverrideConfiguration()
-            await sendScheduledOverrideActivationNotification(name: overrideName)
         } catch {
             debug(.default, "\(DebuggingIdentifiers.failed) Failed to activate scheduled override: \(error)")
         }
@@ -473,13 +481,18 @@ extension Adjustments.StateModel {
         }
     }
 
-    private func sendScheduledOverrideActivationNotification(name: String) async {
+    private func sendScheduledOverrideActivationNotification(name: String, scheduledDate: Date) async {
         let content = UNMutableNotificationContent()
-        content.title = String(localized: "Override Active")
-        content.body = String(localized: "\(name) has started.")
+        content.title = String(localized: "Override Scheduled")
+        content.body = String(localized: "\(name) will start at \(DateFormatter.localizedString(from: scheduledDate, dateStyle: .none, timeStyle: .short)).")
         content.sound = .default
+        content.userInfo[NotificationAction.key] = NotificationAction.scheduledOverrideActivation.rawValue
+        content.userInfo["scheduledDate"] = scheduledDate.timeIntervalSince1970
 
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: scheduledDate)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+
         let request = UNNotificationRequest(
             identifier: "scheduledOverrideActivation",
             content: content,

@@ -720,6 +720,15 @@ extension BaseUserNotificationsManager: UNUserNotificationCenterDelegate {
                     action: .pumpConfig
                 )
                 self.router.alertMessage.send(messageCont)
+            case .scheduledOverrideActivation:
+                if let dateInterval = response.notification.request.content.userInfo["scheduledDate"] as? TimeInterval {
+                    let scheduledDate = Date(timeIntervalSince1970: dateInterval)
+                    DispatchQueue.main.async {
+                        self.broadcaster.notify(ScheduledOverrideActivationObserver.self, on: .main) {
+                            $0.scheduledOverrideShouldActivate(for: scheduledDate)
+                        }
+                    }
+                }
             default: break
             }
         }
