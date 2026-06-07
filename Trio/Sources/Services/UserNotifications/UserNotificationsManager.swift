@@ -25,6 +25,7 @@ enum NotificationAction: String {
 
     case snooze
     case pumpConfig
+    case scheduledOverrideActivation
     case none
 }
 
@@ -45,6 +46,10 @@ protocol pumpNotificationObserver {
 
 protocol SnoozeObserver {
     @MainActor func snoozeDidChange(_ untilDate: Date)
+}
+
+protocol ScheduledOverrideActivationObserver {
+    func scheduledOverrideShouldActivate(for date: Date)
 }
 
 final class BaseUserNotificationsManager: NSObject, UserNotificationsManager, Injectable {
