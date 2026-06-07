@@ -454,6 +454,7 @@ extension Adjustments.StateModel {
     }
 
     func cancelScheduledOverride(_ objectID: NSManagedObjectID) async {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["scheduledOverrideActivation"])
         scheduledOverrideTask?.cancel()
         scheduledOverrideTask = nil
         await overrideStorage.deleteOverridePreset(objectID)
