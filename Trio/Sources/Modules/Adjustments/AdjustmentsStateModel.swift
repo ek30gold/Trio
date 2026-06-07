@@ -91,6 +91,7 @@ extension Adjustments {
             setupSettings()
             broadcaster.register(SettingsObserver.self, observer: self)
             broadcaster.register(PreferencesObserver.self, observer: self)
+            broadcaster.register(ScheduledOverrideActivationObserver.self, observer: self)
 
             Task {
                 await withTaskGroup(of: Void.self) { group in

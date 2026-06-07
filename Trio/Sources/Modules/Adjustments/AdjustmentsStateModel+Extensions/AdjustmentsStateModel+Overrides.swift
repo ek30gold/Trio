@@ -539,3 +539,11 @@ enum DisableSmbOptions: String, CaseIterable {
         }
     }
 }
+
+extension Adjustments.StateModel: ScheduledOverrideActivationObserver {
+    func scheduledOverrideShouldActivate(for date: Date) {
+        Task {
+            await activateScheduledOverride(for: date)
+        }
+    }
+}
