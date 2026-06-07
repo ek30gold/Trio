@@ -66,18 +66,14 @@ struct OverrideView: ChartContent {
     private func drawScheduledOverrides() -> some ChartContent {
         ForEach(scheduledOverrides, id: \.objectID) { (override: OverrideStored) in
             if let startDate = override.date {
-                let endDate: Date
-                if override.indefinite {
-                    endDate = state.endMarker
-                } else if let duration = MainChartHelper.calculateDuration(
-                    objectID: override.objectID,
-                    attribute: "duration",
-                    context: viewContext
-                ) {
-                    endDate = startDate.addingTimeInterval(duration)
-                } else {
-                    endDate = state.endMarker
-                }
+                let endDate: Date = override.indefinite
+                    ? state.endMarker
+                    : (MainChartHelper.calculateDuration(
+                        objectID: override.objectID,
+                        attribute: "duration",
+                        context: viewContext
+                    ).map { startDate.addingTimeInterval($0) } ?? state.endMarker)
+
                 let target = getOverrideTarget(override: override)
                 RuleMark(
                     xStart: .value("Start", startDate),
