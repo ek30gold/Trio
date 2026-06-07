@@ -7,6 +7,7 @@ extension Adjustments.RootView {
             currentActiveAdjustment
         }
         if !state.scheduledOverrides.isEmpty {
+            scheduledOverrideBanner
             scheduledOverridesSection
         }
         if state.overridePresets.isNotEmpty {
@@ -262,16 +263,58 @@ extension Adjustments.RootView {
 
     private var scheduledOverridesSection: some View {
         Section {
+            ForEach(state.scheduledOverrides) { override in
+                HStack {
+                    Text(override.name ?? "Scheduled Override")
+                    Spacer()
+                    if let date = override.date {
+                        Text("Starts in \(formattedTimeRemaining(date.timeIntervalSinceNow))")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    selectedOverride = override
+                    state.showOverrideEditSheet = true
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        Task { await state.cancelScheduledOverride(override.objectID) }
+                    } label: {
+                        Label(
+                            String(localized: "Cancel"),
+                            systemImage: "xmark.circle.fill"
+                        )
+                    }
+                }
+            }
+            .listRowBackground(Color.chart)
+        } header: {
+            Text("Scheduled Overrides")
+        }
+    }
+
+    private var scheduledOverrideBanner: some View {
+        Section {
             HStack {
                 Text(
-                    "\(state.scheduledOverrides.first?.name ?? "Override") is scheduled for \(formattedScheduledTime())"
+                    "\(state.scheduledOverrides.first?.name ?? "Override") " +
+                        String(localized: "is scheduled for") +
+                        " \(formattedScheduledTime())"
                 )
+                .foregroundStyle(.white)
                 Spacer()
                 Button {
-                    Task { await state.cancelScheduledOverride(state.scheduledOverrides.first!.objectID) }
+                    Task {
+                        if let id = state.scheduledOverrides.first?.objectID {
+                            await state.cancelScheduledOverride(id)
+                        }
+                    }
                 } label: {
-                    Text("Cancel Future Override")
-                        .foregroundStyle(Color.primary)
+                    Text(String(localized: "Cancel Future Override"))
+                        .foregroundStyle(.white)
+                        .bold()
                 }
                 .buttonStyle(.plain)
             }
