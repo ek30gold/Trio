@@ -510,51 +510,58 @@ struct EditOverrideForm: View {
 
     private var saveButton: some View {
         let (isInvalid, errorMessage) = isOverrideInvalid()
+        let scheduleIsDisabled = scheduledDate <= Date()
 
-        return Section(
-            header:
-            HStack {
-                Spacer()
-                Text(errorMessage ?? "").textCase(nil)
-                    .foregroundColor(colorScheme == .dark ? .orange : .accentColor)
-                Spacer()
-            },
-            content: {
-                Button(action: {
-                    saveChanges()
+        return Group {
+            Section(
+                header:
+                HStack {
+                    Spacer()
+                    Text(errorMessage ?? "").textCase(nil)
+                        .foregroundColor(colorScheme == .dark ? .orange : .accentColor)
+                    Spacer()
+                },
+                content: {
+                    Button(action: {
+                        saveChanges()
 
-                    Task {
-                        do {
-                            guard let moc = override.managedObjectContext else { return }
-                            guard moc.hasChanges else { return }
-                            try moc.save()
+                        Task {
+                            do {
+                                guard let moc = override.managedObjectContext else { return }
+                                guard moc.hasChanges else { return }
+                                try moc.save()
 
-                            try await state.nightscoutManager.uploadProfiles()
+                                try await state.nightscoutManager.uploadProfiles()
 
-                            // Disable previous active Override
-                            if let currentActiveOverride = state.currentActiveOverride {
-                                Task {
-                                    await state.disableAllActiveOverrides(
-                                        except: currentActiveOverride.objectID,
-                                        createOverrideRunEntry: false
-                                    )
-                                    // Update View
-                                    state.updateLatestOverrideConfiguration()
+                                // Disable previous active Override
+                                if let currentActiveOverride = state.currentActiveOverride {
+                                    Task {
+                                        await state.disableAllActiveOverrides(
+                                            except: currentActiveOverride.objectID,
+                                            createOverrideRunEntry: false
+                                        )
+                                        // Update View
+                                        state.updateLatestOverrideConfiguration()
+                                    }
                                 }
-                            }
 
-                            hasChanges = false
-                            presentationMode.wrappedValue.dismiss()
-                        } catch {
-                            debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to edit Override")
+                                hasChanges = false
+                                presentationMode.wrappedValue.dismiss()
+                            } catch {
+                                debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to edit Override")
+                            }
                         }
-                    }
-                }, label: {
-                    Text("Save Override")
-                })
-                    .disabled(isInvalid) // Disable button if changes are invalid
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .tint(.white)
+                    }, label: {
+                        Text("Save Override")
+                    })
+                        .disabled(isInvalid) // Disable button if changes are invalid
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .tint(.white)
+                }
+            )
+            .listRowBackground(isInvalid ? Color(.systemGray4) : Color(.systemBlue))
+
+            Section {
                 Button(action: {
                     saveChanges()
                     override.enabled = false
@@ -574,10 +581,12 @@ struct EditOverrideForm: View {
                 }, label: {
                     Text("Schedule Override")
                 })
-                .disabled(scheduledDate <= Date())
+                .disabled(scheduleIsDisabled)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .tint(.white)
             }
-        )
-        .listRowBackground(isInvalid ? Color(.systemGray4) : Color(.systemBlue))
+            .listRowBackground(scheduleIsDisabled ? Color(.systemGray4) : Color(.systemBlue))
+        }
     }
 
     private func isOverrideInvalid() -> (Bool, String?) {
