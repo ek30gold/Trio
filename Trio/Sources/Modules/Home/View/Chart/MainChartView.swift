@@ -124,6 +124,7 @@ extension MainChartView {
                 OverrideView(
                     state: state,
                     overrides: state.overrides,
+                    scheduledOverrides: state.scheduledOverrides,
                     overrideRunStored: state.overrideRunStored,
                     units: state.units,
                     viewContext: context
