@@ -64,7 +64,7 @@ struct OverrideView: ChartContent {
 
     @ChartContentBuilder
     private func drawScheduledOverrides() -> some ChartContent {
-        ForEach(scheduledOverrides, id: \.objectID) { override in
+        ForEach(scheduledOverrides, id: \.objectID) { (override: OverrideStored) in
             if let startDate = override.date {
                 let endDate: Date
                 if override.indefinite {

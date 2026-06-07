@@ -55,7 +55,7 @@ extension Home.StateModel {
                     key: "date",
                     ascending: true
                 )
-                await updateScheduledOverrides(with: results)
+                await updateScheduledOverrides(with: results as? [NSManagedObject] ?? [])
             } catch {
                 debug(.default, "\(DebuggingIdentifiers.failed) Failed to fetch scheduled overrides: \(error)")
             }
