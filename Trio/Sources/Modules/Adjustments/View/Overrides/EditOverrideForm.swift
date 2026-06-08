@@ -566,6 +566,7 @@ struct EditOverrideForm: View {
                     saveChanges()
                     override.enabled = false
                     override.date = scheduledDate
+                    override.isPreset = false
 
                     Task {
                         do {
