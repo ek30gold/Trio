@@ -17,27 +17,6 @@ extension Adjustments.RootView {
                 defaultText
             }
         }
-        .popup(
-            isPresented: state.showScheduledOverrideToast,
-            alignment: .center,
-            direction: .top
-        ) {
-            HStack(spacing: 8) {
-                Image(systemName: "clock.badge.checkmark")
-                    .font(.body)
-                Text(String(localized: "Override scheduled"))
-                    .font(.body)
-                    .bold()
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.purple.opacity(0.9))
-            )
-            .padding(.top, 8)
-        }
     }
 
     var overridePresets: some View {
