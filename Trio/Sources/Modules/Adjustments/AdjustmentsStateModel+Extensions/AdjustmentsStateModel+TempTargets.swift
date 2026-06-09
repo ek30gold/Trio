@@ -244,6 +244,8 @@ extension Adjustments.StateModel {
             ? String(localized: "A temp target is scheduled to start soon.")
             : String(format: String(localized: "Temp target \"%@\" is scheduled to start soon."), name)
         content.sound = .default
+        content.userInfo[NotificationAction.key] = NotificationAction.scheduledTempTargetActivation.rawValue
+        content.userInfo["scheduledDate"] = scheduledDate.timeIntervalSince1970
 
         let triggerDate = Calendar.current.dateComponents(
             [.year, .month, .day, .hour, .minute, .second],
