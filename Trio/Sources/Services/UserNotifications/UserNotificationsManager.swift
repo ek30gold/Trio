@@ -26,6 +26,7 @@ enum NotificationAction: String {
     case snooze
     case pumpConfig
     case scheduledOverrideActivation
+    case scheduledTempTargetActivation
     case none
 }
 
@@ -50,6 +51,10 @@ protocol SnoozeObserver {
 
 protocol ScheduledOverrideActivationObserver {
     func scheduledOverrideShouldActivate(for date: Date)
+}
+
+protocol ScheduledTempTargetActivationObserver {
+    func scheduledTempTargetShouldActivate(for date: Date)
 }
 
 final class BaseUserNotificationsManager: NSObject, UserNotificationsManager, Injectable {
@@ -726,6 +731,15 @@ extension BaseUserNotificationsManager: UNUserNotificationCenterDelegate {
                     DispatchQueue.main.async {
                         self.broadcaster.notify(ScheduledOverrideActivationObserver.self, on: .main) {
                             $0.scheduledOverrideShouldActivate(for: scheduledDate)
+                        }
+                    }
+                }
+            case .scheduledTempTargetActivation:
+                if let dateInterval = response.notification.request.content.userInfo["scheduledDate"] as? TimeInterval {
+                    let scheduledDate = Date(timeIntervalSince1970: dateInterval)
+                    DispatchQueue.main.async {
+                        self.broadcaster.notify(ScheduledTempTargetActivationObserver.self, on: .main) {
+                            $0.scheduledTempTargetShouldActivate(for: scheduledDate)
                         }
                     }
                 }

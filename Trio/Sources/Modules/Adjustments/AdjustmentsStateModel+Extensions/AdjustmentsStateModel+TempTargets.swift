@@ -487,3 +487,11 @@ enum TempTargetSensitivityAdjustmentType: String, CaseIterable {
     case standard = "Standard"
     case slider = "Custom"
 }
+
+extension Adjustments.StateModel: ScheduledTempTargetActivationObserver {
+    func scheduledTempTargetShouldActivate(for date: Date) {
+        Task {
+            await enableScheduledTempTarget(for: date)
+        }
+    }
+}
