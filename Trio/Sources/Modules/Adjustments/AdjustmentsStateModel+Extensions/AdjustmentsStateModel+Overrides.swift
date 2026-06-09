@@ -401,8 +401,8 @@ extension Adjustments.StateModel {
             debug(.default, "\(DebuggingIdentifiers.failed) Scheduled date out of valid range.")
             return
         }
-        scheduledOverrideTask?.cancel()
-        scheduledOverrideTask = Task {
+        scheduledOverrideTasks[objectID]?.cancel()
+        scheduledOverrideTasks[objectID] = Task {
             await waitUntilDate(scheduledDate)
             guard !Task.isCancelled else { return }
             await activateScheduledOverride(for: scheduledDate)
@@ -450,8 +450,8 @@ extension Adjustments.StateModel {
 
     func cancelScheduledOverride(_ objectID: NSManagedObjectID) async {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["scheduledOverrideActivation"])
-        scheduledOverrideTask?.cancel()
-        scheduledOverrideTask = nil
+        scheduledOverrideTasks[objectID]?.cancel()
+        scheduledOverrideTasks.removeValue(forKey: objectID)
         await overrideStorage.deleteOverridePreset(objectID)
         setupScheduledOverridesArray()
     }
@@ -460,19 +460,20 @@ extension Adjustments.StateModel {
         Task {
             do {
                 let ids = try await overrideStorage.fetchScheduledOverrides()
-                guard let firstID = ids.first,
-                      let override = try? viewContext.existingObject(with: firstID) as? OverrideStored,
-                      let scheduledDate = override.date,
-                      scheduledDate > Date() else { return }
+                for id in ids {
+                    guard let override = try? viewContext.existingObject(with: id) as? OverrideStored,
+                          let scheduledDate = override.date,
+                          scheduledDate > Date() else { continue }
 
-                scheduledOverrideTask?.cancel()
-                scheduledOverrideTask = Task {
-                    await waitUntilDate(scheduledDate)
-                    guard !Task.isCancelled else { return }
-                    await activateScheduledOverride(for: scheduledDate)
+                    scheduledOverrideTasks[id]?.cancel()
+                    scheduledOverrideTasks[id] = Task {
+                        await waitUntilDate(scheduledDate)
+                        guard !Task.isCancelled else { return }
+                        await activateScheduledOverride(for: scheduledDate)
+                    }
                 }
             } catch {
-                debug(.default, "\(DebuggingIdentifiers.failed) Failed to restart pending scheduled override task: \(error)")
+                debug(.default, "\(DebuggingIdentifiers.failed) Failed to restart pending scheduled override tasks: \(error)")
             }
         }
     }

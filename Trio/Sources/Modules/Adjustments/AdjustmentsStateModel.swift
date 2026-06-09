@@ -31,7 +31,7 @@ extension Adjustments {
         var isPreset: Bool = false
         var overridePresets: [OverrideStored] = []
         var scheduledOverrides: [OverrideStored] = []
-        var scheduledOverrideTask: Task<Void, Never>? = nil
+        var scheduledOverrideTasks: [NSManagedObjectID: Task<Void, Never>] = [:]
         var advancedSettings: Bool = false
         var isfAndCr: Bool = true
         var isf: Bool = true
