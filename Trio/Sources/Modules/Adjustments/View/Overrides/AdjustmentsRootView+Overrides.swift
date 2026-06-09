@@ -298,39 +298,39 @@ extension Adjustments.RootView {
     }
 
     private var scheduledOverrideBanner: some View {
-        Section {
-            HStack {
-                Text(
-                    "\(state.scheduledOverrides.first?.name ?? "Override") " +
-                        String(localized: "is scheduled for") +
-                        " \(formattedScheduledTime())"
-                )
-                .foregroundStyle(.white)
-                Spacer()
-                Button {
-                    Task {
-                        if let id = state.scheduledOverrides.first?.objectID {
-                            await state.cancelScheduledOverride(id)
+        ForEach(state.scheduledOverrides) { override in
+            Section {
+                HStack {
+                    Text(
+                        "\(override.name ?? "Override") " +
+                            String(localized: "is scheduled for") +
+                            " \(formattedScheduledTime(for: override))"
+                    )
+                    .foregroundStyle(.white)
+                    Spacer()
+                    Button {
+                        Task {
+                            await state.cancelScheduledOverride(override.objectID)
                         }
+                    } label: {
+                        Text(String(localized: "Cancel Future Override"))
+                            .foregroundStyle(.white)
+                            .bold()
                     }
-                } label: {
-                    Text(String(localized: "Cancel Future Override"))
-                        .foregroundStyle(.white)
-                        .bold()
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    selectedOverride = override
+                    state.showOverrideEditSheet = true
+                }
             }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                selectedOverride = state.scheduledOverrides.first
-                state.showOverrideEditSheet = true
-            }
+            .listRowBackground(Color.purple.opacity(0.8))
         }
-        .listRowBackground(Color.purple.opacity(0.8))
     }
 
-    private func formattedScheduledTime() -> String {
-        guard let date = state.scheduledOverrides.first?.date else { return "" }
+    private func formattedScheduledTime(for override: OverrideStored) -> String {
+        guard let date = override.date else { return "" }
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         formatter.dateStyle = .none
