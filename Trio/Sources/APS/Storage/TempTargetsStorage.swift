@@ -79,7 +79,10 @@ final class BaseTempTargetsStorage: TempTargetsStorage, Injectable {
     }
 
     func fetchScheduledTempTargets() async throws -> [NSManagedObjectID] {
-        let scheduledTempTargets = NSPredicate(format: "date > %@", Date() as NSDate)
+        let scheduledTempTargets = NSPredicate(
+            format: "date > %@ AND enabled == false AND isPreset == false",
+            Date() as NSDate
+        )
 
         let results = try await CoreDataStack.shared.fetchEntitiesAsync(
             ofType: TempTargetStored.self,
@@ -99,7 +102,9 @@ final class BaseTempTargetsStorage: TempTargetsStorage, Injectable {
     }
 
     func fetchScheduledTempTarget(for targetDate: Date) async throws -> [NSManagedObjectID] {
-        let predicate = NSPredicate(format: "date == %@", targetDate as NSDate)
+        let lower = targetDate.addingTimeInterval(-1)
+        let upper = targetDate.addingTimeInterval(1)
+        let predicate = NSPredicate(format: "date >= %@ AND date <= %@", lower as NSDate, upper as NSDate)
 
         let results = try await CoreDataStack.shared.fetchEntitiesAsync(
             ofType: TempTargetStored.self,

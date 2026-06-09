@@ -62,6 +62,7 @@ extension Adjustments {
         var newPresetName = ""
         var tempTargetPresets: [TempTargetStored] = []
         var scheduledTempTargets: [TempTargetStored] = []
+        var scheduledTempTargetTasks: [NSManagedObjectID: Task<Void, Never>] = [:]
         var percentage: Double = 100
         var autosensMax: Decimal = 1.2
         var halfBasalTarget: Decimal = 160
@@ -100,6 +101,8 @@ extension Adjustments {
                     group.addTask { self.updateLatestTempTargetConfiguration() }
                     group.addTask { self.setupScheduledOverridesArray() }
                     group.addTask { self.restartPendingScheduledOverrideTask() }
+                    group.addTask { self.setupScheduledTempTargetsArray() }
+                    group.addTask { self.restartPendingScheduledTempTargetTask() }
                 }
             }
         }

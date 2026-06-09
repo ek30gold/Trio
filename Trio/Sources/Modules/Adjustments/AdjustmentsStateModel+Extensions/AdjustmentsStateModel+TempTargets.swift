@@ -1,6 +1,7 @@
 import Combine
 import CoreData
 import Foundation
+import UserNotifications
 
 extension Adjustments.StateModel {
     // MARK: - State Initialization and Updates
@@ -133,19 +134,15 @@ extension Adjustments.StateModel {
         }
     }
 
-    /// Saves a scheduled Temp Target and activates it at the specified date.
+    /// Saves a scheduled Temp Target and registers it for future activation.
     func saveScheduledTempTarget() async throws {
-        let date = self.date
-        guard date > Date() else { return }
+        let scheduledDate = date
+        guard scheduledDate > Date(),
+              scheduledDate <= Date().addingTimeInterval(72 * 3600) else { return }
 
-        let adjustmentType = halfBasalTarget == settingHalfBasalTarget ? "Standard" : "Custom"
-        debug(
-            .default,
-            "TempTarget: target=\(tempTargetTarget), HBT=\(settingHalfBasalTarget), effectiveHBT=\(halfBasalTarget), percentage=\(Int(percentage))%, adjustmentType=\(adjustmentType)"
-        )
         let tempTarget = TempTarget(
             name: tempTargetName,
-            createdAt: date,
+            createdAt: scheduledDate,
             targetTop: tempTargetTarget,
             targetBottom: tempTargetTarget,
             duration: tempTargetDuration,
@@ -155,12 +152,24 @@ extension Adjustments.StateModel {
             enabled: false,
             halfBasalTarget: halfBasalTarget
         )
+
         try await tempTargetStorage.storeTempTarget(tempTarget: tempTarget)
         setupScheduledTempTargetsArray()
-        await waitUntilDate(date)
-        await disableAllActiveTempTargets(createTempTargetRunEntry: true)
-        await enableScheduledTempTarget(for: date)
-        tempTargetStorage.saveTempTargetsToStorage([tempTarget])
+
+        let ids = try await tempTargetStorage.fetchScheduledTempTarget(for: scheduledDate)
+        guard let firstID = ids.first else {
+            debug(.default, "\(DebuggingIdentifiers.failed) Failed to find stored scheduled temp target.")
+            return
+        }
+
+        scheduledTempTargetTasks[firstID]?.cancel()
+        scheduledTempTargetTasks[firstID] = Task {
+            await waitUntilDate(scheduledDate)
+            guard !Task.isCancelled else { return }
+            await enableScheduledTempTarget(for: scheduledDate)
+        }
+
+        await sendScheduledTempTargetNotification(name: tempTargetName, scheduledDate: scheduledDate)
     }
 
     /// Enables a scheduled Temp Target for a specific date.
@@ -193,6 +202,64 @@ extension Adjustments.StateModel {
                 .default,
                 "\(DebuggingIdentifiers.failed) Failed to enable scheduled temp target: \(error)"
             )
+        }
+    }
+
+    /// Cancels a scheduled Temp Target and removes it from storage.
+    func cancelScheduledTempTarget(_ objectID: NSManagedObjectID) async {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["scheduledTempTargetActivation"])
+        scheduledTempTargetTasks[objectID]?.cancel()
+        scheduledTempTargetTasks.removeValue(forKey: objectID)
+        await tempTargetStorage.deleteTempTargetPreset(objectID)
+        setupScheduledTempTargetsArray()
+    }
+
+    /// Restarts in-memory Tasks for any pending scheduled temp targets after app relaunch.
+    func restartPendingScheduledTempTargetTask() {
+        Task {
+            do {
+                let ids = try await tempTargetStorage.fetchScheduledTempTargets()
+                for id in ids {
+                    guard let tempTarget = try? viewContext.existingObject(with: id) as? TempTargetStored,
+                          let scheduledDate = tempTarget.date,
+                          scheduledDate > Date() else { continue }
+                    scheduledTempTargetTasks[id]?.cancel()
+                    scheduledTempTargetTasks[id] = Task {
+                        await waitUntilDate(scheduledDate)
+                        guard !Task.isCancelled else { return }
+                        await enableScheduledTempTarget(for: scheduledDate)
+                    }
+                }
+            } catch {
+                debug(.default, "\(DebuggingIdentifiers.failed) Failed to restart pending scheduled temp target tasks: \(error)")
+            }
+        }
+    }
+
+    /// Sends a local notification for a scheduled Temp Target activation.
+    func sendScheduledTempTargetNotification(name: String, scheduledDate: Date) async {
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "Scheduled Temp Target")
+        content.body = name.isEmpty
+            ? String(localized: "A temp target is scheduled to start soon.")
+            : String(format: String(localized: "Temp target \"%@\" is scheduled to start soon."), name)
+        content.sound = .default
+
+        let triggerDate = Calendar.current.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second],
+            from: scheduledDate
+        )
+        let trigger = UNCalendarNotificationTrigger(dateMatching: triggerDate, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: "scheduledTempTargetActivation",
+            content: content,
+            trigger: trigger
+        )
+
+        do {
+            try await UNUserNotificationCenter.current().add(request)
+        } catch {
+            debug(.default, "\(DebuggingIdentifiers.failed) Failed to schedule temp target notification: \(error)")
         }
     }
 
