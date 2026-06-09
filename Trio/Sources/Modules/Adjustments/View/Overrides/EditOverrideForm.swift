@@ -504,6 +504,11 @@ struct EditOverrideForm: View {
                     in: Date().addingTimeInterval(60)...Date().addingTimeInterval(72 * 3600),
                     displayedComponents: [.date, .hourAndMinute]
                 )
+                if let message = schedulingConflictMessage {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(Color.red)
+                }
             }
         }
     }
@@ -582,12 +587,33 @@ struct EditOverrideForm: View {
                 }, label: {
                     Text("Schedule Override")
                 })
-                .disabled(scheduleIsDisabled)
+                .disabled(scheduleIsDisabled || hasSchedulingConflict)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .tint(.white)
             }
             .listRowBackground(scheduleIsDisabled ? Color(.systemGray4) : Color(.systemBlue))
         }
+    }
+
+    private var hasSchedulingConflict: Bool {
+        let newStart = scheduledDate
+        let newDurationSeconds = indefinite ? Double.infinity : Double(truncating: duration as NSDecimalNumber) * 60
+        let newEnd = indefinite ? Date.distantFuture : newStart.addingTimeInterval(newDurationSeconds)
+
+        for existing in state.scheduledOverrides {
+            guard let existingStart = existing.date else { continue }
+            let existingDurationSeconds = existing.indefinite ? Double.infinity : (existing.duration?.doubleValue ?? 0) * 60
+            let existingEnd = existing.indefinite ? Date.distantFuture : existingStart.addingTimeInterval(existingDurationSeconds)
+
+            let overlaps = newStart < existingEnd && newEnd > existingStart
+            if overlaps { return true }
+        }
+        return false
+    }
+
+    private var schedulingConflictMessage: String? {
+        guard hasSchedulingConflict else { return nil }
+        return String(localized: "Selected time conflicts with an existing scheduled override.")
     }
 
     private func isOverrideInvalid() -> (Bool, String?) {
