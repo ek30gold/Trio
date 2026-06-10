@@ -568,17 +568,38 @@ struct EditOverrideForm: View {
 
             Section {
                 Button(action: {
-                    saveChanges()
-                    override.enabled = false
-                    override.date = scheduledDate
-                    override.isPreset = false
-
                     Task {
                         do {
-                            guard let moc = override.managedObjectContext else { return }
-                            guard moc.hasChanges else { return }
-                            try moc.save()
-                            state.scheduleOverride(objectID: override.objectID, for: scheduledDate)
+                            let newOverride = Override(
+                                name: name,
+                                enabled: false,
+                                date: scheduledDate,
+                                duration: duration,
+                                indefinite: indefinite,
+                                percentage: percentage,
+                                smbIsOff: smbIsOff,
+                                isPreset: false,
+                                id: "",
+                                overrideTarget: target_override,
+                                target: target ?? 0,
+                                advancedSettings: advancedSettings,
+                                isfAndCr: isfAndCr,
+                                isf: isf,
+                                cr: cr,
+                                smbIsScheduledOff: smbIsScheduledOff,
+                                start: start ?? 0,
+                                end: end ?? 0,
+                                smbMinutes: smbMinutes ?? state.defaultSmbMinutes,
+                                uamMinutes: uamMinutes ?? state.defaultUamMinutes
+                            )
+                            try await state.overrideStorage.storeOverride(override: newOverride)
+
+                            let ids = try await state.overrideStorage.fetchScheduledOverride(for: scheduledDate)
+                            guard let newID = ids.first else {
+                                debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to find newly stored scheduled override")
+                                return
+                            }
+                            state.scheduleOverride(objectID: newID, for: scheduledDate)
                             presentationMode.wrappedValue.dismiss()
                         } catch {
                             debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to schedule override")
