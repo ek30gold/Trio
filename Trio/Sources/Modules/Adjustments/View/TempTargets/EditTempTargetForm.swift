@@ -342,32 +342,40 @@ struct EditTempTargetForm: View {
 
     private var scheduleTempTargetButton: some View {
         Button(action: {
-            saveChanges()
-            tempTarget.enabled = false
-            tempTarget.date = scheduledDate
-            tempTarget.isPreset = false
-
             Task {
                 do {
-                    guard let moc = tempTarget.managedObjectContext else { return }
-                    guard moc.hasChanges else { return }
-                    try moc.save()
+                    let newTempTarget = TempTarget(
+                        name: name.isEmpty ? "Custom Target" : name,
+                        createdAt: scheduledDate,
+                        targetTop: target,
+                        targetBottom: target,
+                        duration: duration,
+                        enteredBy: TempTarget.local,
+                        reason: TempTarget.custom,
+                        isPreset: false,
+                        enabled: false,
+                        halfBasalTarget: halfBasalTarget
+                    )
+                    try await state.tempTargetStorage.storeTempTarget(tempTarget: newTempTarget)
 
                     let ids = try await state.tempTargetStorage.fetchScheduledTempTarget(for: scheduledDate)
-                    if let firstID = ids.first {
-                        state.scheduledTempTargetTasks[firstID]?.cancel()
-                        state.scheduledTempTargetTasks[firstID] = Task {
-                            await state.waitUntilDate(scheduledDate)
-                            guard !Task.isCancelled else { return }
-                            await state.enableScheduledTempTarget(for: scheduledDate)
-                        }
-                        state.setupScheduledTempTargetsArray()
-                        Task {
-                            await state.sendScheduledTempTargetNotification(
-                                name: tempTarget.name ?? "",
-                                scheduledDate: scheduledDate
-                            )
-                        }
+                    guard let newID = ids.first else {
+                        debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to find newly stored scheduled temp target")
+                        return
+                    }
+
+                    state.scheduledTempTargetTasks[newID]?.cancel()
+                    state.scheduledTempTargetTasks[newID] = Task {
+                        await state.waitUntilDate(scheduledDate)
+                        guard !Task.isCancelled else { return }
+                        await state.enableScheduledTempTarget(for: scheduledDate)
+                    }
+                    state.setupScheduledTempTargetsArray()
+                    Task {
+                        await state.sendScheduledTempTargetNotification(
+                            name: name,
+                            scheduledDate: scheduledDate
+                        )
                     }
                     presentationMode.wrappedValue.dismiss()
                 } catch {
