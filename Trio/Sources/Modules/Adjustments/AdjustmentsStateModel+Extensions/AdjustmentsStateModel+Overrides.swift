@@ -2,6 +2,7 @@ import Combine
 import CoreData
 import Foundation
 import SwiftUI
+import UserNotifications
 
 extension Adjustments.StateModel {
     // MARK: - Enact Overrides
@@ -371,6 +372,132 @@ extension Adjustments.StateModel {
 
         return percentage
     }
+
+    func setupScheduledOverridesArray() {
+        Task {
+            do {
+                let ids = try await overrideStorage.fetchScheduledOverrides()
+                await updateScheduledOverridesArray(with: ids)
+            } catch {
+                debug(.default, "\(DebuggingIdentifiers.failed) Failed to setup scheduled overrides: \(error)")
+            }
+        }
+    }
+
+    @MainActor private func updateScheduledOverridesArray(with IDs: [NSManagedObjectID]) async {
+        do {
+            let overrideObjects = try IDs.compactMap { id in
+                try viewContext.existingObject(with: id) as? OverrideStored
+            }
+            scheduledOverrides = overrideObjects
+        } catch {
+            debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to extract scheduled overrides: \(error)")
+        }
+    }
+
+    func scheduleOverride(objectID: NSManagedObjectID, for scheduledDate: Date) {
+        guard scheduledDate > Date(),
+              scheduledDate <= Date().addingTimeInterval(72 * 3600) else {
+            debug(.default, "\(DebuggingIdentifiers.failed) Scheduled date out of valid range.")
+            return
+        }
+        scheduledOverrideTasks[objectID]?.cancel()
+        scheduledOverrideTasks[objectID] = Task {
+            await waitUntilDate(scheduledDate)
+            guard !Task.isCancelled else { return }
+            await activateScheduledOverride(for: scheduledDate)
+        }
+        setupScheduledOverridesArray()
+        let overrideName: String
+        if let override = try? viewContext.existingObject(with: objectID) as? OverrideStored {
+            overrideName = override.name ?? ""
+        } else {
+            overrideName = ""
+        }
+        Task {
+            await sendScheduledOverrideActivationNotification(name: overrideName, scheduledDate: scheduledDate)
+        }
+    }
+
+    func activateScheduledOverride(for date: Date) async {
+        do {
+            let ids = try await overrideStorage.fetchScheduledOverride(for: date)
+            guard let firstID = ids.first else {
+                debug(.default, "\(DebuggingIdentifiers.failed) No scheduled override found for the specified date.")
+                return
+            }
+
+            var overrideName: String = ""
+
+            await disableAllActiveOverrides(createOverrideRunEntry: currentActiveOverride != nil)
+
+            try await MainActor.run {
+                guard let override = try viewContext.existingObject(with: firstID) as? OverrideStored else { return }
+                overrideName = override.name ?? ""
+                override.enabled = true
+                override.date = Date()
+                override.isUploadedToNS = false
+                isOverrideEnabled = true
+                try viewContext.save()
+            }
+
+            setupScheduledOverridesArray()
+            updateLatestOverrideConfiguration()
+        } catch {
+            debug(.default, "\(DebuggingIdentifiers.failed) Failed to activate scheduled override: \(error)")
+        }
+    }
+
+    func cancelScheduledOverride(_ objectID: NSManagedObjectID) async {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["scheduledOverrideActivation"])
+        scheduledOverrideTasks[objectID]?.cancel()
+        scheduledOverrideTasks.removeValue(forKey: objectID)
+        await overrideStorage.deleteOverridePreset(objectID)
+        setupScheduledOverridesArray()
+    }
+
+    func restartPendingScheduledOverrideTask() {
+        Task {
+            do {
+                let ids = try await overrideStorage.fetchScheduledOverrides()
+                for id in ids {
+                    guard let override = try? viewContext.existingObject(with: id) as? OverrideStored,
+                          let scheduledDate = override.date,
+                          scheduledDate > Date() else { continue }
+
+                    scheduledOverrideTasks[id]?.cancel()
+                    scheduledOverrideTasks[id] = Task {
+                        await waitUntilDate(scheduledDate)
+                        guard !Task.isCancelled else { return }
+                        await activateScheduledOverride(for: scheduledDate)
+                    }
+                }
+            } catch {
+                debug(.default, "\(DebuggingIdentifiers.failed) Failed to restart pending scheduled override tasks: \(error)")
+            }
+        }
+    }
+
+    private func sendScheduledOverrideActivationNotification(name: String, scheduledDate: Date) async {
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "Override Scheduled")
+        content.body = String(localized: "\(name) will start at \(DateFormatter.localizedString(from: scheduledDate, dateStyle: .none, timeStyle: .short)).")
+        content.sound = .default
+        content.userInfo[NotificationAction.key] = NotificationAction.scheduledOverrideActivation.rawValue
+        content.userInfo["scheduledDate"] = scheduledDate.timeIntervalSince1970
+
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: scheduledDate)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+
+        let request = UNNotificationRequest(
+            identifier: "scheduledOverrideActivation",
+            content: content,
+            trigger: trigger
+        )
+
+        try? await UNUserNotificationCenter.current().add(request)
+    }
 }
 
 enum IsfAndOrCrOptions: String, CaseIterable {
@@ -406,6 +533,14 @@ enum DisableSmbOptions: String, CaseIterable {
             return String(localized: "Disable", comment: "Option to disable SMB")
         case .disableOnSchedule:
             return String(localized: "Disable on Schedule", comment: "Option to disable SMB based on schedule")
+        }
+    }
+}
+
+extension Adjustments.StateModel: ScheduledOverrideActivationObserver {
+    func scheduledOverrideShouldActivate(for date: Date) {
+        Task {
+            await activateScheduledOverride(for: date)
         }
     }
 }

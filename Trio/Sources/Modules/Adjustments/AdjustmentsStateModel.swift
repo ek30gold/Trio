@@ -30,6 +30,8 @@ extension Adjustments {
         var overrideName: String = ""
         var isPreset: Bool = false
         var overridePresets: [OverrideStored] = []
+        var scheduledOverrides: [OverrideStored] = []
+        var scheduledOverrideTasks: [NSManagedObjectID: Task<Void, Never>] = [:]
         var advancedSettings: Bool = false
         var isfAndCr: Bool = true
         var isf: Bool = true
@@ -60,6 +62,7 @@ extension Adjustments {
         var newPresetName = ""
         var tempTargetPresets: [TempTargetStored] = []
         var scheduledTempTargets: [TempTargetStored] = []
+        var scheduledTempTargetTasks: [NSManagedObjectID: Task<Void, Never>] = [:]
         var percentage: Double = 100
         var autosensMax: Decimal = 1.2
         var halfBasalTarget: Decimal = 160
@@ -88,6 +91,8 @@ extension Adjustments {
             setupSettings()
             broadcaster.register(SettingsObserver.self, observer: self)
             broadcaster.register(PreferencesObserver.self, observer: self)
+            broadcaster.register(ScheduledOverrideActivationObserver.self, observer: self)
+            broadcaster.register(ScheduledTempTargetActivationObserver.self, observer: self)
 
             Task {
                 await withTaskGroup(of: Void.self) { group in
@@ -95,6 +100,10 @@ extension Adjustments {
                     group.addTask { self.setupTempTargetPresetsArray() }
                     group.addTask { self.updateLatestOverrideConfiguration() }
                     group.addTask { self.updateLatestTempTargetConfiguration() }
+                    group.addTask { self.setupScheduledOverridesArray() }
+                    group.addTask { self.restartPendingScheduledOverrideTask() }
+                    group.addTask { self.setupScheduledTempTargetsArray() }
+                    group.addTask { self.restartPendingScheduledTempTargetTask() }
                 }
             }
         }

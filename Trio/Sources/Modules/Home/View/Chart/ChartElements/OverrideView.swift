@@ -6,6 +6,7 @@ import SwiftUI
 struct OverrideView: ChartContent {
     var state: Home.StateModel
     let overrides: [OverrideStored]
+    let scheduledOverrides: [OverrideStored]
     let overrideRunStored: [OverrideRunStored]
     let units: GlucoseUnits
     let viewContext: NSManagedObjectContext
@@ -13,6 +14,7 @@ struct OverrideView: ChartContent {
     var body: some ChartContent {
         drawActiveOverrides()
         drawOverrideRunStored()
+        drawScheduledOverrides()
     }
 
     private func drawActiveOverrides() -> some ChartContent {
@@ -57,6 +59,30 @@ struct OverrideView: ChartContent {
             )
             .foregroundStyle(Color.purple.opacity(0.25))
             .lineStyle(.init(lineWidth: 8))
+        }
+    }
+
+    @ChartContentBuilder
+    private func drawScheduledOverrides() -> some ChartContent {
+        ForEach(scheduledOverrides, id: \.objectID) { (override: OverrideStored) in
+            if let startDate = override.date {
+                let endDate: Date = override.indefinite
+                    ? state.endMarker
+                    : (MainChartHelper.calculateDuration(
+                        objectID: override.objectID,
+                        attribute: "duration",
+                        context: viewContext
+                    ).map { startDate.addingTimeInterval($0) } ?? state.endMarker)
+
+                let target = getOverrideTarget(override: override)
+                RuleMark(
+                    xStart: .value("Start", startDate),
+                    xEnd: .value("End", endDate),
+                    y: .value("Target", target)
+                )
+                .lineStyle(StrokeStyle(lineWidth: 8))
+                .foregroundStyle(Color.purple.opacity(0.15))
+            }
         }
     }
 

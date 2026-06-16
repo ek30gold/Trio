@@ -26,6 +26,7 @@ struct EditOverrideForm: View {
     @State private var selectedIsfCrOption: IsfAndOrCrOptions
     @State private var selectedDisableSmbOption: DisableSmbOptions
     @State private var hasChanges = false
+    @State private var scheduledDate: Date = Date()
     @State private var isEditing = false
     @State private var target_override = false
     @State private var percentageStep: Int = 1
@@ -495,59 +496,145 @@ struct EditOverrideForm: View {
                 }
             }
             .listRowBackground(Color.chart)
+
+            Section(header: Text("Schedule Override")) {
+                DatePicker(
+                    String(localized: "Start Time"),
+                    selection: $scheduledDate,
+                    in: Date().addingTimeInterval(60)...Date().addingTimeInterval(72 * 3600),
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+                if let message = schedulingConflictMessage {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(Color.red)
+                }
+            }
         }
     }
 
     private var saveButton: some View {
         let (isInvalid, errorMessage) = isOverrideInvalid()
+        let scheduleIsDisabled = scheduledDate <= Date()
 
-        return Section(
-            header:
-            HStack {
-                Spacer()
-                Text(errorMessage ?? "").textCase(nil)
-                    .foregroundColor(colorScheme == .dark ? .orange : .accentColor)
-                Spacer()
-            },
-            content: {
+        return Group {
+            Section(
+                header:
+                HStack {
+                    Spacer()
+                    Text(errorMessage ?? "").textCase(nil)
+                        .foregroundColor(colorScheme == .dark ? .orange : .accentColor)
+                    Spacer()
+                },
+                content: {
+                    Button(action: {
+                        saveChanges()
+
+                        Task {
+                            do {
+                                guard let moc = override.managedObjectContext else { return }
+                                guard moc.hasChanges else { return }
+                                try moc.save()
+
+                                try await state.nightscoutManager.uploadProfiles()
+
+                                // Disable previous active Override
+                                if let currentActiveOverride = state.currentActiveOverride {
+                                    Task {
+                                        await state.disableAllActiveOverrides(
+                                            except: currentActiveOverride.objectID,
+                                            createOverrideRunEntry: false
+                                        )
+                                        // Update View
+                                        state.updateLatestOverrideConfiguration()
+                                    }
+                                }
+
+                                hasChanges = false
+                                presentationMode.wrappedValue.dismiss()
+                            } catch {
+                                debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to edit Override")
+                            }
+                        }
+                    }, label: {
+                        Text("Save Override")
+                    })
+                        .disabled(isInvalid) // Disable button if changes are invalid
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .tint(.white)
+                }
+            )
+            .listRowBackground(isInvalid ? Color(.systemGray4) : Color(.systemBlue))
+
+            Section {
                 Button(action: {
-                    saveChanges()
-
                     Task {
                         do {
-                            guard let moc = override.managedObjectContext else { return }
-                            guard moc.hasChanges else { return }
-                            try moc.save()
+                            let newOverride = Override(
+                                name: name,
+                                enabled: false,
+                                date: scheduledDate,
+                                duration: duration,
+                                indefinite: indefinite,
+                                percentage: percentage,
+                                smbIsOff: smbIsOff,
+                                isPreset: false,
+                                id: "",
+                                overrideTarget: target_override,
+                                target: target ?? 0,
+                                advancedSettings: advancedSettings,
+                                isfAndCr: isfAndCr,
+                                isf: isf,
+                                cr: cr,
+                                smbIsScheduledOff: smbIsScheduledOff,
+                                start: start ?? 0,
+                                end: end ?? 0,
+                                smbMinutes: smbMinutes ?? state.defaultSmbMinutes,
+                                uamMinutes: uamMinutes ?? state.defaultUamMinutes
+                            )
+                            try await state.overrideStorage.storeOverride(override: newOverride)
 
-                            try await state.nightscoutManager.uploadProfiles()
-
-                            // Disable previous active Override
-                            if let currentActiveOverride = state.currentActiveOverride {
-                                Task {
-                                    await state.disableAllActiveOverrides(
-                                        except: currentActiveOverride.objectID,
-                                        createOverrideRunEntry: false
-                                    )
-                                    // Update View
-                                    state.updateLatestOverrideConfiguration()
-                                }
+                            let ids = try await state.overrideStorage.fetchScheduledOverride(for: scheduledDate)
+                            guard let newID = ids.first else {
+                                debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to find newly stored scheduled override")
+                                return
                             }
-
-                            hasChanges = false
+                            state.scheduleOverride(objectID: newID, for: scheduledDate)
                             presentationMode.wrappedValue.dismiss()
                         } catch {
-                            debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to edit Override")
+                            debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to schedule override")
                         }
                     }
                 }, label: {
-                    Text("Save Override")
+                    Text("Schedule Override")
                 })
-                    .disabled(isInvalid) // Disable button if changes are invalid
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .tint(.white)
+                .disabled(scheduleIsDisabled || hasSchedulingConflict)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .tint(.white)
             }
-        )
-        .listRowBackground(isInvalid ? Color(.systemGray4) : Color(.systemBlue))
+            .listRowBackground(scheduleIsDisabled ? Color(.systemGray4) : Color(.systemBlue))
+        }
+    }
+
+    private var hasSchedulingConflict: Bool {
+        let newStart = scheduledDate
+        let newDurationSeconds = indefinite ? Double.infinity : Double(truncating: duration as NSDecimalNumber) * 60
+        let newEnd = indefinite ? Date.distantFuture : newStart.addingTimeInterval(newDurationSeconds)
+
+        for existing in state.scheduledOverrides {
+            guard let existingStart = existing.date else { continue }
+            let existingDurationSeconds = existing.indefinite ? Double.infinity : (existing.duration?.doubleValue ?? 0) * 60
+            let existingEnd = existing.indefinite ? Date.distantFuture : existingStart.addingTimeInterval(existingDurationSeconds)
+
+            let overlaps = newStart < existingEnd && newEnd > existingStart
+            if overlaps { return true }
+        }
+        return false
+    }
+
+    private var schedulingConflictMessage: String? {
+        guard hasSchedulingConflict else { return nil }
+        return String(localized: "Selected time conflicts with an existing scheduled override.")
     }
 
     private func isOverrideInvalid() -> (Bool, String?) {

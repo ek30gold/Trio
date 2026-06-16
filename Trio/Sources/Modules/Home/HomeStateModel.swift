@@ -98,6 +98,7 @@ extension Home {
         var batteryFromPersistence: [OpenAPS_Battery] = []
         var lastPumpBolus: PumpEventStored?
         var overrides: [OverrideStored] = []
+        var scheduledOverrides: [OverrideStored] = []
         var overrideRunStored: [OverrideRunStored] = []
         var tempTargetStored: [TempTargetStored] = []
         var tempTargetRunStored: [TempTargetRunStored] = []

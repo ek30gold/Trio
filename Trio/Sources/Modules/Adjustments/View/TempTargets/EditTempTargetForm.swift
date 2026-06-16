@@ -25,6 +25,7 @@ struct EditTempTargetForm: View {
     @State private var isUsingSlider = false
     @State private var isPreset = false
     @State private var isEnabled = false
+    @State private var scheduledDate: Date = Date()
 
     init(tempTargetToEdit: TempTargetStored, state: Adjustments.StateModel) {
         tempTarget = tempTargetToEdit
@@ -61,6 +62,7 @@ struct EditTempTargetForm: View {
             List {
                 editTempTarget()
                 saveButton
+                scheduleTempTargetButton
             }
             .listSectionSpacing(10)
             .padding(.top, 30)
@@ -320,7 +322,72 @@ struct EditTempTargetForm: View {
                     }
                 }.listRowBackground(Color.clear)
             }
+
+            Section(header: Text("Schedule Temp Target")) {
+                DatePicker(
+                    String(localized: "Start Time"),
+                    selection: $scheduledDate,
+                    in: Date().addingTimeInterval(60)...Date().addingTimeInterval(72 * 3600),
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+                if let message = schedulingConflictMessage {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(Color.red)
+                }
+            }
+            .listRowBackground(Color.chart)
         }
+    }
+
+    private var scheduleTempTargetButton: some View {
+        Button(action: {
+            Task {
+                do {
+                    let newTempTarget = TempTarget(
+                        name: name.isEmpty ? "Custom Target" : name,
+                        createdAt: scheduledDate,
+                        targetTop: target,
+                        targetBottom: target,
+                        duration: duration,
+                        enteredBy: TempTarget.local,
+                        reason: TempTarget.custom,
+                        isPreset: false,
+                        enabled: false,
+                        halfBasalTarget: halfBasalTarget
+                    )
+                    try await state.tempTargetStorage.storeTempTarget(tempTarget: newTempTarget)
+
+                    let ids = try await state.tempTargetStorage.fetchScheduledTempTarget(for: scheduledDate)
+                    guard let newID = ids.first else {
+                        debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to find newly stored scheduled temp target")
+                        return
+                    }
+
+                    state.scheduledTempTargetTasks[newID]?.cancel()
+                    state.scheduledTempTargetTasks[newID] = Task {
+                        await state.waitUntilDate(scheduledDate)
+                        guard !Task.isCancelled else { return }
+                        await state.enableScheduledTempTarget(for: scheduledDate)
+                    }
+                    state.setupScheduledTempTargetsArray()
+                    Task {
+                        await state.sendScheduledTempTargetNotification(
+                            name: name,
+                            scheduledDate: scheduledDate
+                        )
+                    }
+                    presentationMode.wrappedValue.dismiss()
+                } catch {
+                    debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to schedule temp target")
+                }
+            }
+        }, label: {
+            Text("Schedule Temp Target")
+        })
+        .disabled(scheduledDate <= Date() || hasSchedulingConflict)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .listRowBackground(scheduledDate <= Date() || hasSchedulingConflict ? Color(UIColor.systemGray4) : Color(UIColor.systemBlue))
     }
 
     private var saveButton: some View {
@@ -396,6 +463,26 @@ struct EditTempTargetForm: View {
         } else {
             tempTarget.halfBasalTarget = nil
         }
+    }
+
+    private var hasSchedulingConflict: Bool {
+        let newStart = scheduledDate
+        let newDurationSeconds = Double(truncating: duration as NSDecimalNumber) * 60
+        let newEnd = newStart.addingTimeInterval(newDurationSeconds)
+
+        for existing in state.scheduledTempTargets {
+            guard let existingStart = existing.date else { continue }
+            let existingDurationSeconds = (existing.duration?.doubleValue ?? 0) * 60
+            let existingEnd = existingStart.addingTimeInterval(existingDurationSeconds)
+            let overlaps = newStart < existingEnd && newEnd > existingStart
+            if overlaps { return true }
+        }
+        return false
+    }
+
+    private var schedulingConflictMessage: String? {
+        guard hasSchedulingConflict else { return nil }
+        return String(localized: "Selected time conflicts with an existing scheduled temp target.")
     }
 
     private func toggleScrollWheel(_ toggle: Bool) -> Bool {

@@ -7,6 +7,7 @@ extension Adjustments.RootView {
             currentActiveAdjustment
         }
         if state.scheduledTempTargets.isNotEmpty {
+            scheduledTempTargetBanner
             scheduledTempTargets
         }
         if state.tempTargetPresets.isNotEmpty {
@@ -16,12 +17,54 @@ extension Adjustments.RootView {
         }
     }
 
+    private var scheduledTempTargetBanner: some View {
+        ForEach(state.scheduledTempTargets) { tempTarget in
+            Section {
+                HStack {
+                    Text(
+                        "\(tempTarget.name ?? "Temp Target") " +
+                            String(localized: "is scheduled for") +
+                            " \(formattedScheduledTempTargetTime(for: tempTarget))"
+                    )
+                    .foregroundStyle(.white)
+                    Spacer()
+                    Button {
+                        Task {
+                            await state.cancelScheduledTempTarget(tempTarget.objectID)
+                        }
+                    } label: {
+                        Text(String(localized: "Cancel Future Temp Target"))
+                            .foregroundStyle(.white)
+                            .bold()
+                    }
+                    .buttonStyle(.plain)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    selectedTempTarget = tempTarget
+                    state.showTempTargetEditSheet = true
+                }
+            }
+            .listRowBackground(Color.purple.opacity(0.8))
+        }
+    }
+
     private var scheduledTempTargets: some View {
         Section {
             ForEach(state.scheduledTempTargets) { tempTarget in
                 tempTargetView(for: tempTarget)
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         actionButtonsForTempTargets(for: tempTarget)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            Task { await state.cancelScheduledTempTarget(tempTarget.objectID) }
+                        } label: {
+                            Label(
+                                String(localized: "Cancel"),
+                                systemImage: "xmark.circle.fill"
+                            )
+                        }
                     }
             }
             .listRowBackground(Color.chart)
@@ -92,6 +135,15 @@ extension Adjustments.RootView {
                 Label("Edit", systemImage: "pencil")
                     .tint(.blue)
             })
+            Button {
+                selectedTempTarget = tempTarget
+                state.showTempTargetEditSheet = true
+            } label: {
+                Label(
+                    String(localized: "Schedule"),
+                    systemImage: "clock"
+                )
+            }
         }
     }
 
@@ -157,6 +209,14 @@ extension Adjustments.RootView {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .padding(5)
         }
+    }
+
+    private func formattedScheduledTempTargetTime(for tempTarget: TempTargetStored) -> String {
+        guard let date = tempTarget.date else { return "" }
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return formatter.string(from: date)
     }
 
     private func tempTargetView(
