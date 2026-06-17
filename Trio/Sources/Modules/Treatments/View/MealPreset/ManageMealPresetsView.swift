@@ -27,8 +27,7 @@ struct ManageMealPresetsView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            List {
+        List {
                 ForEach(state.mealPresets, id: \.self) { preset in
                     Button {
                         populateEditForm(from: preset)
@@ -107,7 +106,6 @@ struct ManageMealPresetsView: View {
                         resetForm()
                     }
                 )
-            }
         }
     }
 
