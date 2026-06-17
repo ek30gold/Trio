@@ -61,6 +61,33 @@ struct MainChartView: View {
         return findDetermination(in: range)
     }
 
+    private func timeForForecastIndex(_ index: Int32) -> Date {
+        let anchor = state.determinationsFromPersistence.first?.deliverAt ?? .distantPast
+        return anchor.addingTimeInterval(TimeInterval(index * 300))
+    }
+
+    var predictedIOBValue: Decimal? {
+        guard let selection else { return nil }
+        let tolerance: TimeInterval = 150
+        let match = state.preprocessedData.first {
+            $0.forecast.type == "iob" &&
+            abs(timeForForecastIndex($0.forecastValue.index).timeIntervalSince(selection)) <= tolerance
+        }
+        guard let match else { return nil }
+        return Decimal(match.forecastValue.value)
+    }
+
+    var predictedCOBValue: Decimal? {
+        guard let selection else { return nil }
+        let tolerance: TimeInterval = 150
+        let match = state.preprocessedData.first {
+            $0.forecast.type == "cob" &&
+            abs(timeForForecastIndex($0.forecastValue.index).timeIntervalSince(selection)) <= tolerance
+        }
+        guard let match else { return nil }
+        return Decimal(match.forecastValue.value)
+    }
+
     var body: some View {
         VStack {
             ZStack {
