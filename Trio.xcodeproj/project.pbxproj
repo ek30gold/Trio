@@ -715,6 +715,7 @@
 		DDF847E12C5C287F0049BB3B /* LiveActivitySettingsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF847E02C5C287F0049BB3B /* LiveActivitySettingsStateModel.swift */; };
 		DDF847E42C5C288F0049BB3B /* LiveActivitySettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF847E32C5C288F0049BB3B /* LiveActivitySettingsRootView.swift */; };
 		DDF847E62C5D66490049BB3B /* AddMealPresetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF847E52C5D66490049BB3B /* AddMealPresetView.swift */; };
+		BD3A9F1F2C5D66490049BB3C /* ManageMealPresetsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD3A9F1E2C5D66490049BB3C /* ManageMealPresetsView.swift */; };
 		DDF847E82C5DABA30049BB3B /* WatchConfigAppleWatchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF847E72C5DABA30049BB3B /* WatchConfigAppleWatchView.swift */; };
 		DDF847EA2C5DABAC0049BB3B /* WatchConfigGarminView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF847E92C5DABAC0049BB3B /* WatchConfigGarminView.swift */; };
 		DDFF202F2DB1D14500AB8A96 /* NotificationPermissionStepView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDFF202E2DB1D14500AB8A96 /* NotificationPermissionStepView.swift */; };
@@ -1578,6 +1579,7 @@
 		DDF847E02C5C287F0049BB3B /* LiveActivitySettingsStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivitySettingsStateModel.swift; sourceTree = "<group>"; };
 		DDF847E32C5C288F0049BB3B /* LiveActivitySettingsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivitySettingsRootView.swift; sourceTree = "<group>"; };
 		DDF847E52C5D66490049BB3B /* AddMealPresetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddMealPresetView.swift; sourceTree = "<group>"; };
+		BD3A9F1E2C5D66490049BB3C /* ManageMealPresetsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageMealPresetsView.swift; sourceTree = "<group>"; };
 		DDF847E72C5DABA30049BB3B /* WatchConfigAppleWatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchConfigAppleWatchView.swift; sourceTree = "<group>"; };
 		DDF847E92C5DABAC0049BB3B /* WatchConfigGarminView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchConfigGarminView.swift; sourceTree = "<group>"; };
 		DDFF202E2DB1D14500AB8A96 /* NotificationPermissionStepView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationPermissionStepView.swift; sourceTree = "<group>"; };
@@ -3379,6 +3381,7 @@
 			children = (
 				BD0B2EF22C5998E600B3298F /* MealPresetView.swift */,
 				DDF847E52C5D66490049BB3B /* AddMealPresetView.swift */,
+				BD3A9F1E2C5D66490049BB3C /* ManageMealPresetsView.swift */,
 			);
 			path = MealPreset;
 			sourceTree = "<group>";
@@ -4512,6 +4515,7 @@
 				58645B9F2CA2D2BE008AFCE7 /* PumpHistorySetup.swift in Sources */,
 				DD17454E2C55CA4D00211FAC /* UnitsLimitsSettingsDataFlow.swift in Sources */,
 				DDF847E62C5D66490049BB3B /* AddMealPresetView.swift in Sources */,
+				BD3A9F1F2C5D66490049BB3C /* ManageMealPresetsView.swift in Sources */,
 				3811DEAE25C9D88300A708ED /* Cache.swift in Sources */,
 				BDA6CC882CAF219B00F942F9 /* TempTargetSetup.swift in Sources */,
 				383420D625FFE38C002D46C1 /* LoopView.swift in Sources */,
