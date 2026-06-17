@@ -96,6 +96,7 @@ extension Treatments {
         var dish: String = ""
         var selection: MealPresetStored?
         var summation: [String] = []
+        var mealPresets: [MealPresetStored] = []
         var maxCarbs: Decimal = 0
         var maxFat: Decimal = 0
         var maxProtein: Decimal = 0
@@ -203,6 +204,7 @@ extension Treatments {
                         group.addTask {
                             self.setupLastBolus()
                         }
+                        group.addTask { self.setupMealPresetsArray() }
 
                         // Wait for all tasks to complete
                         try await group.waitForAll()
@@ -701,6 +703,30 @@ extension Treatments {
 
         func addToSummation() {
             summation.append(selection?.dish ?? "")
+        }
+
+        func setupMealPresetsArray() {
+            let request: NSFetchRequest<MealPresetStored> = MealPresetStored.fetchRequest()
+            request.sortDescriptors = [NSSortDescriptor(key: "orderPosition", ascending: true)]
+            do {
+                mealPresets = try viewContext.fetch(request)
+            } catch {
+                debug(.default, "\(DebuggingIdentifiers.failed) Failed to fetch meal presets: \(error)")
+            }
+        }
+
+        func reorderMealPreset(from source: IndexSet, to destination: Int) {
+            mealPresets.move(fromOffsets: source, toOffset: destination)
+            for (index, preset) in mealPresets.enumerated() {
+                preset.orderPosition = Int16(index + 1)
+            }
+            do {
+                guard viewContext.hasChanges else { return }
+                try viewContext.save()
+                setupMealPresetsArray()
+            } catch {
+                debug(.default, "\(DebuggingIdentifiers.failed) Failed to save meal preset order: \(error)")
+            }
         }
     }
 }
