@@ -12,6 +12,8 @@ struct SelectionPopoverView: ChartContent {
     let currentGlucoseTarget: Decimal
     let glucoseColorScheme: GlucoseColorScheme
     let isSmoothingEnabled: Bool
+    let predictedIOB: Decimal?
+    let predictedCOB: Decimal?
 
     private var glucoseToDisplay: Decimal {
         units == .mgdL ? Decimal(selectedGlucose.glucose) : Decimal(selectedGlucose.glucose).asMmolL
@@ -104,6 +106,28 @@ struct SelectionPopoverView: ChartContent {
                         + Text(String(localized: " g", comment: "gram of carbs"))
                 }
                 .foregroundStyle(Color.orange).font(.body)
+            }
+
+            if let predictedIOB {
+                HStack {
+                    Image(systemName: "syringe.fill").frame(width: 15)
+                    Text(Formatter.decimalFormatterWithTwoFractionDigits.string(from: NSDecimalNumber(decimal: predictedIOB)) ?? "")
+                        .bold()
+                        + Text(String(localized: " U", comment: "Insulin unit"))
+                }
+                .foregroundStyle(Color.insulin).font(.body)
+                .opacity(0.6)
+            }
+
+            if let predictedCOB {
+                HStack {
+                    Image(systemName: "fork.knife").frame(width: 15)
+                    Text(Formatter.integerFormatter.string(from: NSDecimalNumber(decimal: predictedCOB)) ?? "")
+                        .bold()
+                        + Text(String(localized: " g", comment: "gram of carbs"))
+                }
+                .foregroundStyle(Color.orange).font(.body)
+                .opacity(0.6)
             }
         }
         .padding(.horizontal)
