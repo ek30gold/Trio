@@ -206,6 +206,8 @@ extension MainChartView {
                         selectedGlucose: selectedGlucose,
                         selectedIOBValue: selectedIOBValue,
                         selectedCOBValue: selectedCOBValue,
+                        predictedIOB: predictedIOBValue,
+                        predictedCOB: predictedCOBValue,
                         units: units,
                         highGlucose: highGlucose,
                         lowGlucose: lowGlucose,
