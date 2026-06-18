@@ -270,6 +270,11 @@ struct MealPresetView: View {
                             .foregroundColor(.blue)
                         Text(key)
                     }
+                    if let note = carbPresets.first(where: { $0.dish ?? "" == key })?.note, !note.isEmpty {
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
