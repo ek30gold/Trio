@@ -206,14 +206,14 @@ extension MainChartView {
                         selectedGlucose: selectedGlucose,
                         selectedIOBValue: selectedIOBValue,
                         selectedCOBValue: selectedCOBValue,
-                        predictedIOB: predictedIOBValue,
-                        predictedCOB: predictedCOBValue,
                         units: units,
                         highGlucose: highGlucose,
                         lowGlucose: lowGlucose,
                         currentGlucoseTarget: currentGlucoseTarget,
                         glucoseColorScheme: glucoseColorScheme,
-                        isSmoothingEnabled: state.settingsManager.settings.smoothGlucose
+                        isSmoothingEnabled: state.settingsManager.settings.smoothGlucose,
+                        predictedIOB: predictedIOBValue,
+                        predictedCOB: predictedCOBValue
                     )
                 }
             }
