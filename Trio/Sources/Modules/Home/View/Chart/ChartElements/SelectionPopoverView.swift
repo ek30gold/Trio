@@ -15,6 +15,7 @@ struct SelectionPopoverView: ChartContent {
     let isSmoothingEnabled: Bool
     let predictedIOB: Decimal?
     let predictedCOB: Decimal?
+    let predictedGlucose: Decimal?
 
     private var glucoseToDisplay: Decimal? {
         guard let selectedGlucose else { return nil }
@@ -93,6 +94,17 @@ struct SelectionPopoverView: ChartContent {
                         Text(smoothedGlucoseToDisplay.description) + Text(" \(units.rawValue)")
                     }.font(.body)
                 }
+            } else if let predictedGlucose {
+                HStack {
+                    Image(systemName: "chart.line.uptrend.xyaxis").frame(width: 15)
+                    Text(units == .mgdL ? predictedGlucose.description : predictedGlucose.formattedAsMmolL)
+                        .bold()
+                    Text(units == .mgdL ? " mg/dL" : " mmol/L")
+                        .foregroundStyle(.secondary)
+                }
+                .foregroundStyle(pointMarkColor ?? Color.primary)
+                .font(.body)
+                .opacity(0.6)
             }
 
             if let selectedIOBValue, let iob = selectedIOBValue.iob {

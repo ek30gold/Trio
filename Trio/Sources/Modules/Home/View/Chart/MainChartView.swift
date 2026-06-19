@@ -227,7 +227,8 @@ extension MainChartView {
                         glucoseColorScheme: glucoseColorScheme,
                         isSmoothingEnabled: state.settingsManager.settings.smoothGlucose,
                         predictedIOB: predictedIOBValue,
-                        predictedCOB: predictedCOBValue
+                        predictedCOB: predictedCOBValue,
+                        predictedGlucose: predictedGlucoseValue
                     )
                 }
             }
