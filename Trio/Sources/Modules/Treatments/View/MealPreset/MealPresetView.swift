@@ -12,7 +12,9 @@ struct MealPresetView: View {
 
     @State private var showAlert = false
     @State private var dish: String = ""
+    @State private var note: String = ""
     @State private var showAddNewPresetSheet = false
+    @State private var showManagePresetsSheet = false
 
     @State private var presetCarbs: Decimal = 0
     @State private var presetFat: Decimal = 0
@@ -24,7 +26,7 @@ struct MealPresetView: View {
 
     @FetchRequest(
         entity: MealPresetStored.entity(),
-        sortDescriptors: [NSSortDescriptor(key: "dish", ascending: true)]
+        sortDescriptors: [NSSortDescriptor(key: "orderPosition", ascending: true)]
     ) var carbPresets: FetchedResults<MealPresetStored>
 
     private var mealFormatter: NumberFormatter {
@@ -71,19 +73,25 @@ struct MealPresetView: View {
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: {
-                        showAddNewPresetSheet.toggle()
-                    }, label: {
-                        HStack {
-                            Text("New Preset")
-                            Image(systemName: "plus")
+                    HStack {
+                        Button("Manage") {
+                            showManagePresetsSheet = true
                         }
-                    })
+                        Button(action: {
+                            showAddNewPresetSheet.toggle()
+                        }, label: {
+                            HStack {
+                                Text("New Preset")
+                                Image(systemName: "plus")
+                            }
+                        })
+                    }
                 }
             })
             .sheet(isPresented: $showAddNewPresetSheet) {
                 AddMealPresetView(
                     dish: $dish,
+                    note: $note,
                     presetCarbs: $presetCarbs,
                     presetFat: $presetFat,
                     presetProtein: $presetProtein,
@@ -94,6 +102,9 @@ struct MealPresetView: View {
                         resetNewPresetForm()
                     }
                 )
+            }
+            .sheet(isPresented: $showManagePresetsSheet) {
+                ManageMealPresetsView(state: state)
             }
             .onDisappear {
                 resetValues()
@@ -259,6 +270,11 @@ struct MealPresetView: View {
                             .foregroundColor(.blue)
                         Text(key)
                     }
+                    if let note = carbPresets.first(where: { $0.dish ?? "" == key })?.note, !note.isEmpty {
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
@@ -271,6 +287,7 @@ struct MealPresetView: View {
 
     private func resetNewPresetForm() {
         dish = ""
+        note = ""
         presetCarbs = 0
         presetFat = 0
         presetProtein = 0
@@ -336,6 +353,8 @@ struct MealPresetView: View {
         if dish != "" {
             let preset = MealPresetStored(context: moc)
             preset.dish = dish
+            preset.note = note.isEmpty ? nil : note
+            preset.orderPosition = Int16((state.mealPresets.count) + 1)
             preset.carbs = presetCarbs as NSDecimalNumber
             if state.useFPUconversion {
                 preset.fat = presetFat as NSDecimalNumber
@@ -346,6 +365,7 @@ struct MealPresetView: View {
                 guard moc.hasChanges else { return }
                 try moc.save()
                 showAddNewPresetSheet.toggle()
+                note = ""
             } catch let error as NSError {
                 debugPrint("\(DebuggingIdentifiers.failed) Failed to save Meal Preset with error: \(error.userInfo)")
             }

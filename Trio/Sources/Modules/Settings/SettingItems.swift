@@ -250,6 +250,11 @@ enum SettingItems {
             path: ["Features", "Meal Settings"]
         ),
         SettingItem(
+            title: "Manage Meal Presets",
+            view: .manageMealPresets,
+            path: ["Features", "Manage Meal Presets"]
+        ),
+        SettingItem(
             title: "Shortcuts",
             view: .shortcutsConfig,
             searchContents: ["Allow Bolusing with Shortcuts"],
