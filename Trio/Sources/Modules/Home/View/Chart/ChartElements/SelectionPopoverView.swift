@@ -3,7 +3,8 @@ import Foundation
 import SwiftUI
 
 struct SelectionPopoverView: ChartContent {
-    let selectedGlucose: GlucoseStored
+    let selectedGlucose: GlucoseStored?
+    let selection: Date
     let selectedIOBValue: OrefDetermination?
     let selectedCOBValue: OrefDetermination?
     let units: GlucoseUnits
@@ -15,11 +16,13 @@ struct SelectionPopoverView: ChartContent {
     let predictedIOB: Decimal?
     let predictedCOB: Decimal?
 
-    private var glucoseToDisplay: Decimal {
-        units == .mgdL ? Decimal(selectedGlucose.glucose) : Decimal(selectedGlucose.glucose).asMmolL
+    private var glucoseToDisplay: Decimal? {
+        guard let selectedGlucose else { return nil }
+        return units == .mgdL ? Decimal(selectedGlucose.glucose) : Decimal(selectedGlucose.glucose).asMmolL
     }
 
-    private var pointMarkColor: Color {
+    private var pointMarkColor: Color? {
+        guard let selectedGlucose else { return nil }
         let hardCodedLow = Decimal(55)
         let hardCodedHigh = Decimal(220)
         let isDynamicColorScheme = glucoseColorScheme == .dynamicColor
@@ -34,7 +37,7 @@ struct SelectionPopoverView: ChartContent {
     }
 
     var body: some ChartContent {
-        RuleMark(x: .value("Selection", selectedGlucose.date ?? Date.now, unit: .minute))
+        RuleMark(x: .value("Selection", selection, unit: .minute))
             .foregroundStyle(Color.tabBar)
             .offset(yStart: isSmoothingEnabled ? 90 : 70)
             .lineStyle(.init(lineWidth: 2))
@@ -46,46 +49,50 @@ struct SelectionPopoverView: ChartContent {
                 selectionPopover
             }
 
-        PointMark(
-            x: .value("Time", selectedGlucose.date ?? Date.now, unit: .minute),
-            y: .value("Value", glucoseToDisplay)
-        )
-        .zIndex(-1)
-        .symbolSize(CGSize(width: 15, height: 15))
-        .foregroundStyle(pointMarkColor)
+        if let selectedGlucose, let glucoseToDisplay, let pointMarkColor {
+            PointMark(
+                x: .value("Time", selectedGlucose.date ?? selection, unit: .minute),
+                y: .value("Value", glucoseToDisplay)
+            )
+            .zIndex(-1)
+            .symbolSize(CGSize(width: 15, height: 15))
+            .foregroundStyle(pointMarkColor)
 
-        PointMark(
-            x: .value("Time", selectedGlucose.date ?? Date.now, unit: .minute),
-            y: .value("Value", glucoseToDisplay)
-        )
-        .zIndex(-1)
-        .symbolSize(CGSize(width: 6, height: 6))
-        .foregroundStyle(Color.primary)
+            PointMark(
+                x: .value("Time", selectedGlucose.date ?? selection, unit: .minute),
+                y: .value("Value", glucoseToDisplay)
+            )
+            .zIndex(-1)
+            .symbolSize(CGSize(width: 6, height: 6))
+            .foregroundStyle(Color.primary)
+        }
     }
 
     @ViewBuilder var selectionPopover: some View {
         VStack(alignment: .leading) {
             HStack {
                 Image(systemName: "clock")
-                Text(selectedGlucose.date?.formatted(.dateTime.hour().minute(.twoDigits)) ?? "")
+                Text(selection.formatted(.dateTime.hour().minute(.twoDigits)))
                     .font(.body).bold()
             }
             .font(.body).padding(.bottom, 2)
 
-            HStack {
-                Text("CGM: ") + Text(glucoseToDisplay.description).bold() + Text(" \(units.rawValue)")
-            }
-            .foregroundStyle(pointMarkColor)
-            .font(.body)
-
-            if isSmoothingEnabled, let smoothedGlucose = selectedGlucose.smoothedGlucose {
-                var smoothedGlucoseToDisplay: Decimal {
-                    units == .mgdL ? smoothedGlucose.decimalValue : smoothedGlucose.decimalValue.asMmolL
-                }
+            if let selectedGlucose, let glucoseToDisplay, let pointMarkColor {
                 HStack {
-                    Image(systemName: "sparkles")
-                    Text(smoothedGlucoseToDisplay.description) + Text(" \(units.rawValue)")
-                }.font(.body)
+                    Text("CGM: ") + Text(glucoseToDisplay.description).bold() + Text(" \(units.rawValue)")
+                }
+                .foregroundStyle(pointMarkColor)
+                .font(.body)
+
+                if isSmoothingEnabled, let smoothedGlucose = selectedGlucose.smoothedGlucose {
+                    var smoothedGlucoseToDisplay: Decimal {
+                        units == .mgdL ? smoothedGlucose.decimalValue : smoothedGlucose.decimalValue.asMmolL
+                    }
+                    HStack {
+                        Image(systemName: "sparkles")
+                        Text(smoothedGlucoseToDisplay.description) + Text(" \(units.rawValue)")
+                    }.font(.body)
+                }
             }
 
             if let selectedIOBValue, let iob = selectedIOBValue.iob {
