@@ -201,9 +201,10 @@ extension MainChartView {
                 )
 
                 /// show glucose value when hovering over it
-                if let selectedGlucose {
+                if let selection {
                     SelectionPopoverView(
                         selectedGlucose: selectedGlucose,
+                        selection: selection,
                         selectedIOBValue: selectedIOBValue,
                         selectedCOBValue: selectedCOBValue,
                         units: units,
