@@ -88,6 +88,19 @@ struct MainChartView: View {
         return Decimal(match.forecastValue.value)
     }
 
+    var predictedGlucoseValue: Decimal? {
+        guard let selection else { return nil }
+        let tolerance: TimeInterval = 150
+        let indices = 0 ..< min(state.minForecast.count, state.maxForecast.count)
+        guard let matchIndex = indices.first(where: {
+            abs(timeForForecastIndex(Int32($0)).timeIntervalSince(selection)) <= tolerance
+        }) else { return nil }
+        let minValue = Decimal(state.minForecast[matchIndex])
+        let maxValue = Decimal(state.maxForecast[matchIndex])
+        let midpoint = (minValue + maxValue) / 2
+        return units == .mmolL ? midpoint.asMmolL : midpoint
+    }
+
     var body: some View {
         VStack {
             ZStack {
