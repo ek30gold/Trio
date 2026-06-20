@@ -40,6 +40,17 @@ This is safety-critical software. Trust in reported state must be verifiable, no
 - **A `git rebase` that reports "patch already upstream" or "dropping commit" is NOT a push confirmation.** It only means the local commit was redundant against whatever the remote currently is — verify the remote separately.
 - **If a push is rejected, stop and report the rejection.** Do not silently rebase-and-retry in a loop. Surface the conflict.
 - **When asked to edit files in a session, do not commit or push unless explicitly asked.** Default to edits-only; the human will verify and commit themselves for anything touching dosing-adjacent code.
+- **Creating a new `.swift` file is not enough on its own.** Writing a new file to disk and committing it to git does NOT add it to the Xcode build target. It must also be registered in `Trio.xcodeproj/project.pbxproj` (in the `PBXBuildFile`, `PBXFileReference`, `PBXGroup`, and `PBXSourcesBuildPhase` sections), or the build will fail with "cannot find 'X' in scope" even though the file clearly exists and `grep`/`git log` checks pass. When creating a new file:
+  1. Find an existing sibling file in the same folder that is known to build correctly, and identify its exact lines in all four `project.pbxproj` sections above.
+  2. Generate two new unique 24-character hex UUIDs (one for `PBXFileReference`, one for `PBXBuildFile`) and confirm they don't already exist in the file.
+  3. Duplicate the sibling's four lines exactly, swapping in the new UUIDs and filename only.
+  4. Verify with `git diff --stat` and full `git diff` on `project.pbxproj` that the change is exactly 4 added lines with nothing removed or altered elsewhere, before committing.
+  5. Do not use a plist validator (e.g. Python's `plistlib`) to sanity-check `project.pbxproj` — it will report the file as invalid regardless of correctness, because `.pbxproj` uses the legacy NeXTSTEP/ASCII plist dialect, not XML or binary plist. This is a known false alarm, not a real signal.
+- **Verify remote sync before every build, not just before pushing.** Work happens across multiple devices/environments (e.g. a PC and a separate phone/Claude Code mobile session) on the same branches. Before triggering any build, always run `git fetch && git status` first:
+  - If local is **ahead** of origin → push before building, or the build won't contain that work.
+  - If local is **behind** → pull/rebase before building, or the build will be missing changes made elsewhere.
+  - If **diverged** → stop, do not build, reconcile via rebase first (check for conflicts, don't assume which side is correct).
+  - Only build once `git status` confirms the branch is up to date with its remote. A build that "still has the bug" may simply be missing a fix that was already correctly committed on a different device — check sync state before re-debugging.
 
 ## Before Implementing
 
