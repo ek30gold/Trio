@@ -80,6 +80,21 @@ final class OpenAPS {
                         }
                     }
             }
+
+            if let iobProjection = determination.iobProjection {
+                let iobProjectionEntity = IOBProjection(context: self.context)
+                iobProjectionEntity.id = UUID()
+                iobProjectionEntity.date = Date()
+                iobProjectionEntity.orefDetermination = newOrefDetermination
+
+                for (index, value) in iobProjection.enumerated() {
+                    let iobProjectionValue = IOBProjectionValue(context: self.context)
+                    iobProjectionValue.index = Int32(index)
+                    iobProjectionValue.value = NSDecimalNumber(decimal: value)
+                    iobProjectionEntity.addToIobProjectionValues(iobProjectionValue)
+                }
+                newOrefDetermination.addToIobProjections(iobProjectionEntity)
+            }
         }
 
         // First save the current Determination to Core Data
