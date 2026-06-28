@@ -14,6 +14,8 @@ protocol DeterminationStorage {
     func getOrefDeterminationNotYetUploadedToNightscout(_ determinationIds: [NSManagedObjectID]) async -> Determination?
     func fetchForecastHierarchy(for determinationID: NSManagedObjectID, in context: NSManagedObjectContext)
     async throws -> [(id: UUID, forecastID: NSManagedObjectID, forecastValueIDs: [NSManagedObjectID])]
+    func fetchIOBProjectionHierarchy(for determinationID: NSManagedObjectID, in context: NSManagedObjectContext)
+    async throws -> [(id: UUID, iobProjectionID: NSManagedObjectID, iobProjectionValueIDs: [NSManagedObjectID])]
 }
 
 final class BaseDeterminationStorage: DeterminationStorage, Injectable {
