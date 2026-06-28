@@ -34,6 +34,7 @@ struct Determination: JSON, Equatable {
     var threshold: Decimal?
     let carbRatio: Decimal?
     let received: Bool?
+    var iobProjection: [Decimal]?
 }
 
 struct Predictions: JSON, Equatable {
