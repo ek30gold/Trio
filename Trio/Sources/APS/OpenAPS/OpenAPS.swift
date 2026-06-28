@@ -449,6 +449,8 @@ final class OpenAPS {
             storage.save(iob, as: Monitor.iob)
         }
 
+        let iobEntryValues = [IOBEntry](from: iob)?.map(\.iob)
+
         var preferences = await preferencesAsync
 
         if !hasSufficientTdd, preferences.useNewFormula || (preferences.useNewFormula && preferences.sigmoid) {
@@ -479,6 +481,10 @@ final class OpenAPS {
             // set both timestamp and deliverAt to the SAME date; this will be updated for timestamp once it is enacted
             // AAPS does it the same way! we'll follow their example!
             determination.timestamp = deliverAt
+
+            if let values = iobEntryValues, let predCount = determination.predictions?.iob?.count {
+                determination.iobProjection = Array(values.prefix(predCount))
+            }
 
             if !simulation {
                 // save to core data asynchronously
