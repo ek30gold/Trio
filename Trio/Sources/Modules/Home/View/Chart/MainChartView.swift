@@ -69,12 +69,11 @@ struct MainChartView: View {
     var predictedIOBValue: Decimal? {
         guard let selection else { return nil }
         let tolerance: TimeInterval = 150
-        let match = state.preprocessedData.first {
-            $0.forecast.type == "iob" &&
-            abs(timeForForecastIndex($0.forecastValue.index).timeIntervalSince(selection)) <= tolerance
+        let match = state.iobProjectionData.first {
+            abs(timeForForecastIndex($0.iobProjectionValue.index).timeIntervalSince(selection)) <= tolerance
         }
         guard let match else { return nil }
-        return Decimal(match.forecastValue.value)
+        return match.iobProjectionValue.value?.decimalValue
     }
 
     var predictedCOBValue: Decimal? {
