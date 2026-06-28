@@ -69,6 +69,17 @@
         <attribute name="value" optional="YES" attributeType="Integer 32" defaultValueString="0.0" usesScalarValueType="YES"/>
         <relationship name="forecast" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Forecast" inverseName="forecastValues" inverseEntity="Forecast"/>
     </entity>
+    <entity name="IOBProjection" representedClassName="IOBProjection" syncable="YES">
+        <attribute name="date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <relationship name="iobProjectionValues" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="IOBProjectionValue" inverseName="iobProjection" inverseEntity="IOBProjectionValue"/>
+        <relationship name="orefDetermination" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="OrefDetermination" inverseName="iobProjections" inverseEntity="OrefDetermination"/>
+    </entity>
+    <entity name="IOBProjectionValue" representedClassName="IOBProjectionValue" syncable="YES">
+        <attribute name="index" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="value" optional="YES" attributeType="Decimal" defaultValueString="0.0"/>
+        <relationship name="iobProjection" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="IOBProjection" inverseName="iobProjectionValues" inverseEntity="IOBProjectionValue"/>
+    </entity>
     <entity name="GlucoseStored" representedClassName="GlucoseStored" syncable="YES">
         <attribute name="date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="direction" optional="YES" attributeType="String"/>
@@ -151,6 +162,7 @@
         <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="timestampEnacted" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <relationship name="forecasts" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Forecast" inverseName="orefDetermination" inverseEntity="Forecast"/>
+        <relationship name="iobProjections" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="IOBProjection" inverseName="orefDetermination" inverseEntity="IOBProjection"/>
         <fetchIndex name="byDate">
             <fetchIndexElement property="deliverAt" type="Binary" order="descending"/>
         </fetchIndex>
