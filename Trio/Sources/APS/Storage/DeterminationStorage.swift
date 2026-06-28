@@ -232,4 +232,32 @@ final class BaseDeterminationStorage: DeterminationStorage, Injectable {
             }
         }
     }
+
+    func fetchIOBProjectionHierarchy(for determinationID: NSManagedObjectID, in context: NSManagedObjectContext)
+    async throws -> [(id: UUID, iobProjectionID: NSManagedObjectID, iobProjectionValueIDs: [NSManagedObjectID])]
+    {
+        let results = try await CoreDataStack.shared.fetchEntitiesAsync(
+            ofType: IOBProjection.self,
+            onContext: context,
+            predicate: NSPredicate(format: "orefDetermination = %@", determinationID),
+            key: "date",
+            ascending: true,
+            relationshipKeyPathsForPrefetching: ["iobProjectionValues"]
+        )
+
+        // Process results entirely within a single context.perform block to avoid data races
+        return await context.perform {
+            guard let iobProjections = results as? [IOBProjection] else { return [] }
+
+            // Create and return the result array entirely within this block
+            return iobProjections.map { iobProjection in
+                let sortedValues = (iobProjection.iobProjectionValues ?? []).sorted { $0.index < $1.index }
+                return (
+                    id: UUID(),
+                    iobProjectionID: iobProjection.objectID,
+                    iobProjectionValueIDs: sortedValues.map(\.objectID)
+                )
+            }
+        }
+    }
 }
