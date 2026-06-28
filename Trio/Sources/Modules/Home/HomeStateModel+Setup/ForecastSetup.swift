@@ -86,4 +86,48 @@ extension Home.StateModel {
         minForecast = minResult
         maxForecast = maxResult
     }
+
+    func preprocessIOBProjectionData() async -> [(
+        id: UUID, iobProjectionID: NSManagedObjectID, iobProjectionValueIDs: [NSManagedObjectID]
+    )] {
+        do {
+            guard let determination = await viewContext.perform({
+                self.enactedAndNonEnactedDeterminations.first
+            }) else {
+                debug(.default, "No determination found for IOB projection preprocessing")
+                return []
+            }
+
+            return try await determinationStorage.fetchIOBProjectionHierarchy(
+                for: determination.objectID,
+                in: taskContext
+            )
+        } catch {
+            debug(
+                .default,
+                "\(DebuggingIdentifiers.failed) Failed to preprocess IOB projection data: \(error)"
+            )
+            return []
+        }
+    }
+
+    @MainActor func updateIOBProjectionData() async {
+        let iobProjectionDataIDs = await preprocessIOBProjectionData()
+
+        var iobProjectionData = [(id: UUID, iobProjection: IOBProjection, iobProjectionValue: IOBProjectionValue)]()
+
+        for data in iobProjectionDataIDs {
+            if let iobProjection = try? viewContext.existingObject(with: data.iobProjectionID) as? IOBProjection {
+                let values = data.iobProjectionValueIDs.compactMap {
+                    try? viewContext.existingObject(with: $0) as? IOBProjectionValue
+                }
+
+                iobProjectionData.append(contentsOf: values.map {
+                    (id: data.id, iobProjection: iobProjection, iobProjectionValue: $0)
+                })
+            }
+        }
+
+        self.iobProjectionData = iobProjectionData
+    }
 }
