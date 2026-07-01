@@ -80,6 +80,54 @@ final class OpenAPS {
                         }
                     }
             }
+
+            if let iobProjection = determination.iobProjection {
+                let iobProjectionEntity = IOBProjection(context: self.context)
+                iobProjectionEntity.id = UUID()
+                iobProjectionEntity.date = Date()
+                iobProjectionEntity.orefDetermination = newOrefDetermination
+
+                for (index, value) in iobProjection.enumerated() {
+                    let iobProjectionValue = IOBProjectionValue(context: self.context)
+                    iobProjectionValue.index = Int32(index)
+                    iobProjectionValue.value = NSDecimalNumber(decimal: value)
+                    iobProjectionEntity.addToIobProjectionValues(iobProjectionValue)
+                }
+                newOrefDetermination.addToIobProjections(iobProjectionEntity)
+            }
+
+            if let latestCarbDate = determination.latestCarbDate,
+               let cobDecimal = determination.cob, cobDecimal > 0,
+               let maxMealAbsorptionTime = determination.maxMealAbsorptionTime
+            {
+                let absorptionHours = Double(truncating: maxMealAbsorptionTime as NSDecimalNumber)
+                let windowEnd = latestCarbDate.addingTimeInterval(absorptionHours * 3600)
+                let determinationTime = newOrefDetermination.deliverAt ?? Date()
+
+                if determinationTime < windowEnd {
+                    let cobProjectionEntity = COBProjection(context: self.context)
+                    cobProjectionEntity.id = UUID()
+                    cobProjectionEntity.date = Date()
+                    cobProjectionEntity.orefDetermination = newOrefDetermination
+
+                    let totalWindow = windowEnd.timeIntervalSince(determinationTime)
+                    var index = 0
+                    var stepTime = determinationTime
+
+                    while stepTime < windowEnd {
+                        let remaining = windowEnd.timeIntervalSince(stepTime)
+                        let fraction = remaining / totalWindow
+                        let cobAtStep = Double(truncating: cobDecimal as NSDecimalNumber) * fraction
+                        let cobProjectionValue = COBProjectionValue(context: self.context)
+                        cobProjectionValue.index = Int32(index)
+                        cobProjectionValue.value = NSDecimalNumber(value: cobAtStep)
+                        cobProjectionEntity.addToCobProjectionValues(cobProjectionValue)
+                        index += 1
+                        stepTime = determinationTime.addingTimeInterval(Double(index) * 300)
+                    }
+                    newOrefDetermination.addToCobProjections(cobProjectionEntity)
+                }
+            }
         }
 
         // First save the current Determination to Core Data
@@ -156,7 +204,7 @@ final class OpenAPS {
         return jsonConverter.convertToJSON(algorithmGlucose)
     }
 
-    private func fetchAndProcessCarbs(additionalCarbs: Decimal? = nil, carbsDate: Date? = nil) async throws -> String {
+    private func fetchAndProcessCarbs(additionalCarbs: Decimal? = nil, carbsDate: Date? = nil) async throws -> (String, Date?) {
         let results = try await CoreDataStack.shared.fetchEntitiesAsync(
             ofType: CarbEntryStored.self,
             onContext: context,
@@ -165,7 +213,7 @@ final class OpenAPS {
             ascending: false
         )
 
-        let json = try await context.perform {
+        let (json, latestCarbDate) = try await context.perform { () -> (String, Date?) in
             guard let carbResults = results as? [CarbEntryStored] else {
                 throw CoreDataError.fetchError(function: #function, file: #file)
             }
@@ -202,10 +250,10 @@ final class OpenAPS {
                 }
             }
 
-            return jsonArray
+            return (jsonArray, carbResults.first?.date)
         }
 
-        return json
+        return (json, latestCarbDate)
     }
 
     private func fetchPumpHistoryObjectIDs() async throws -> [NSManagedObjectID]? {
@@ -406,7 +454,7 @@ final class OpenAPS {
         // Await the results of asynchronous tasks
         let (
             pumpHistoryJSON,
-            carbsAsJSON,
+            (carbsAsJSON, latestCarbDate),
             glucoseAsJSON,
             trioCustomOrefVariables,
             profile,
@@ -449,6 +497,8 @@ final class OpenAPS {
             storage.save(iob, as: Monitor.iob)
         }
 
+        let iobEntryValues = [IOBEntry](from: iob)?.map(\.iob)
+
         var preferences = await preferencesAsync
 
         if !hasSufficientTdd, preferences.useNewFormula || (preferences.useNewFormula && preferences.sigmoid) {
@@ -479,6 +529,13 @@ final class OpenAPS {
             // set both timestamp and deliverAt to the SAME date; this will be updated for timestamp once it is enacted
             // AAPS does it the same way! we'll follow their example!
             determination.timestamp = deliverAt
+
+            if let values = iobEntryValues, let predCount = determination.predictions?.iob?.count {
+                determination.iobProjection = Array(values.prefix(predCount))
+            }
+
+            determination.latestCarbDate = latestCarbDate
+            determination.maxMealAbsorptionTime = preferences.maxMealAbsorptionTime
 
             if !simulation {
                 // save to core data asynchronously
@@ -575,7 +632,7 @@ final class OpenAPS {
         async let getTempTargets = loadFileFromStorageAsync(name: Settings.tempTargets)
 
         // Await the results of asynchronous tasks
-        let (pumpHistoryJSON, carbsAsJSON, glucoseAsJSON, profile, basalProfile, tempTargets) = await (
+        let (pumpHistoryJSON, (carbsAsJSON, _), glucoseAsJSON, profile, basalProfile, tempTargets) = await (
             try parsePumpHistory(await pumpHistoryObjectIDs),
             try carbs,
             try glucose,

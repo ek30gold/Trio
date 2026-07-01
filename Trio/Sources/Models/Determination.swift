@@ -34,6 +34,9 @@ struct Determination: JSON, Equatable {
     var threshold: Decimal?
     let carbRatio: Decimal?
     let received: Bool?
+    var iobProjection: [Decimal]?
+    var latestCarbDate: Date?
+    var maxMealAbsorptionTime: Decimal?
 }
 
 struct Predictions: JSON, Equatable {

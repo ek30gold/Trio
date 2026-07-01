@@ -18,6 +18,8 @@ extension Home.StateModel {
                 try await updateDeterminationsArray(with: enactedAndNonEnactedIds, keyPath: \.enactedAndNonEnactedDeterminations)
 
                 await updateForecastData()
+                await updateIOBProjectionData()
+                await updateCOBProjectionData()
             } catch let error as CoreDataError {
                 debug(.default, "Core Data error in setupDeterminationsArray: \(error)")
             } catch {

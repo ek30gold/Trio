@@ -61,6 +61,44 @@ struct MainChartView: View {
         return findDetermination(in: range)
     }
 
+    private func timeForForecastIndex(_ index: Int32) -> Date {
+        let anchor = state.determinationsFromPersistence.first?.deliverAt ?? .distantPast
+        return anchor.addingTimeInterval(TimeInterval(index * 300))
+    }
+
+    var predictedIOBValue: Decimal? {
+        guard let selection else { return nil }
+        let tolerance: TimeInterval = 150
+        let match = state.iobProjectionData.first {
+            abs(timeForForecastIndex($0.iobProjectionValue.index).timeIntervalSince(selection)) <= tolerance
+        }
+        guard let match else { return nil }
+        return match.iobProjectionValue.value?.decimalValue
+    }
+
+    var predictedCOBValue: Decimal? {
+        guard let selection else { return nil }
+        let tolerance: TimeInterval = 150
+        let match = state.cobProjectionData.first {
+            abs(timeForForecastIndex($0.cobProjectionValue.index).timeIntervalSince(selection)) <= tolerance
+        }
+        guard let match else { return nil }
+        return match.cobProjectionValue.value?.decimalValue
+    }
+
+    var predictedGlucoseValue: Decimal? {
+        guard let selection else { return nil }
+        let tolerance: TimeInterval = 150
+        let indices = 0 ..< min(state.minForecast.count, state.maxForecast.count)
+        guard let matchIndex = indices.first(where: {
+            abs(timeForForecastIndex(Int32($0)).timeIntervalSince(selection)) <= tolerance
+        }) else { return nil }
+        let minValue = Decimal(state.minForecast[matchIndex])
+        let maxValue = Decimal(state.maxForecast[matchIndex])
+        let midpoint = (minValue + maxValue) / 2
+        return units == .mmolL ? midpoint.asMmolL : midpoint
+    }
+
     var body: some View {
         VStack {
             ZStack {
@@ -174,9 +212,10 @@ extension MainChartView {
                 )
 
                 /// show glucose value when hovering over it
-                if let selectedGlucose {
+                if let selection {
                     SelectionPopoverView(
                         selectedGlucose: selectedGlucose,
+                        selection: selection,
                         selectedIOBValue: selectedIOBValue,
                         selectedCOBValue: selectedCOBValue,
                         units: units,
@@ -184,7 +223,10 @@ extension MainChartView {
                         lowGlucose: lowGlucose,
                         currentGlucoseTarget: currentGlucoseTarget,
                         glucoseColorScheme: glucoseColorScheme,
-                        isSmoothingEnabled: state.settingsManager.settings.smoothGlucose
+                        isSmoothingEnabled: state.settingsManager.settings.smoothGlucose,
+                        predictedIOB: predictedIOBValue,
+                        predictedCOB: predictedCOBValue,
+                        predictedGlucose: predictedGlucoseValue
                     )
                 }
             }

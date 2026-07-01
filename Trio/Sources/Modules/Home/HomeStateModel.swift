@@ -104,6 +104,8 @@ extension Home {
         var tempTargetRunStored: [TempTargetRunStored] = []
         var isOverrideCancelled: Bool = false
         var preprocessedData: [(id: UUID, forecast: Forecast, forecastValue: ForecastValue)] = []
+        var iobProjectionData: [(id: UUID, iobProjection: IOBProjection, iobProjectionValue: IOBProjectionValue)] = []
+        var cobProjectionData: [(id: UUID, cobProjection: COBProjection, cobProjectionValue: COBProjectionValue)] = []
         var pumpStatusHighlightMessage: String?
         var pumpStatusBadgeImage: UIImage?
         var pumpStatusBadgeColor: Color?

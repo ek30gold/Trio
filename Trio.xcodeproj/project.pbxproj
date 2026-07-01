@@ -692,6 +692,14 @@
 		DDE179612C910127003CDDB7 /* StatsData+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE179412C910127003CDDB7 /* StatsData+CoreDataProperties.swift */; };
 		DDE179622C910127003CDDB7 /* Forecast+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE179422C910127003CDDB7 /* Forecast+CoreDataClass.swift */; };
 		DDE179632C910127003CDDB7 /* Forecast+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE179432C910127003CDDB7 /* Forecast+CoreDataProperties.swift */; };
+		EE4B288F5C5E5831BCAE0AB1 /* IOBProjection+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0B66F71501AAECFA84CCD3C /* IOBProjection+CoreDataClass.swift */; };
+		D02162F076BA35D2CCD23F5F /* IOBProjection+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C3EB84EBB7F6D855D76F6BB /* IOBProjection+CoreDataProperties.swift */; };
+		7F2E134CA33D4DEB623143CE /* IOBProjectionValue+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F7EF9ABF68CC151B0512264 /* IOBProjectionValue+CoreDataClass.swift */; };
+		C2F5DC43C3494A2DBF1DB7D7 /* IOBProjectionValue+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F37657EBECA2A2B0F859A4C /* IOBProjectionValue+CoreDataProperties.swift */; };
+		6A338206C69B8EA99B881E29 /* COBProjection+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F2BDB69BADA58E24D09F764 /* COBProjection+CoreDataClass.swift */; };
+		12F08FC4CF0C48B65D0AEC9C /* COBProjection+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6848F6C65979C0F6859C1774 /* COBProjection+CoreDataProperties.swift */; };
+		C6DEAF203DB9B0E25E5B7A88 /* COBProjectionValue+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EB1E080D375137428445243 /* COBProjectionValue+CoreDataClass.swift */; };
+		A530C17342C20429C09B22C4 /* COBProjectionValue+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 777AD73B6507FCE9820137FE /* COBProjectionValue+CoreDataProperties.swift */; };
 		DDE179662C910127003CDDB7 /* OpenAPS_Battery+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE179462C910127003CDDB7 /* OpenAPS_Battery+CoreDataClass.swift */; };
 		DDE179672C910127003CDDB7 /* OpenAPS_Battery+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE179472C910127003CDDB7 /* OpenAPS_Battery+CoreDataProperties.swift */; };
 		DDE179682C910127003CDDB7 /* TempBasalStored+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE179482C910127003CDDB7 /* TempBasalStored+CoreDataClass.swift */; };
@@ -1557,6 +1565,14 @@
 		DDE179412C910127003CDDB7 /* StatsData+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsData+CoreDataProperties.swift"; sourceTree = "<group>"; };
 		DDE179422C910127003CDDB7 /* Forecast+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Forecast+CoreDataClass.swift"; sourceTree = "<group>"; };
 		DDE179432C910127003CDDB7 /* Forecast+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Forecast+CoreDataProperties.swift"; sourceTree = "<group>"; };
+		D0B66F71501AAECFA84CCD3C /* IOBProjection+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOBProjection+CoreDataClass.swift"; sourceTree = "<group>"; };
+		1C3EB84EBB7F6D855D76F6BB /* IOBProjection+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOBProjection+CoreDataProperties.swift"; sourceTree = "<group>"; };
+		8F7EF9ABF68CC151B0512264 /* IOBProjectionValue+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOBProjectionValue+CoreDataClass.swift"; sourceTree = "<group>"; };
+		3F37657EBECA2A2B0F859A4C /* IOBProjectionValue+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOBProjectionValue+CoreDataProperties.swift"; sourceTree = "<group>"; };
+		7F2BDB69BADA58E24D09F764 /* COBProjection+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "COBProjection+CoreDataClass.swift"; sourceTree = "<group>"; };
+		6848F6C65979C0F6859C1774 /* COBProjection+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "COBProjection+CoreDataProperties.swift"; sourceTree = "<group>"; };
+		8EB1E080D375137428445243 /* COBProjectionValue+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "COBProjectionValue+CoreDataClass.swift"; sourceTree = "<group>"; };
+		777AD73B6507FCE9820137FE /* COBProjectionValue+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "COBProjectionValue+CoreDataProperties.swift"; sourceTree = "<group>"; };
 		DDE179462C910127003CDDB7 /* OpenAPS_Battery+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OpenAPS_Battery+CoreDataClass.swift"; sourceTree = "<group>"; };
 		DDE179472C910127003CDDB7 /* OpenAPS_Battery+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OpenAPS_Battery+CoreDataProperties.swift"; sourceTree = "<group>"; };
 		DDE179482C910127003CDDB7 /* TempBasalStored+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TempBasalStored+CoreDataClass.swift"; sourceTree = "<group>"; };
@@ -3761,6 +3777,14 @@
 				3B56079F2ECD62AC00C723C1 /* DeletedGlucoseStored+CoreDataProperties.swift */,
 				DDE179422C910127003CDDB7 /* Forecast+CoreDataClass.swift */,
 				DDE179432C910127003CDDB7 /* Forecast+CoreDataProperties.swift */,
+				D0B66F71501AAECFA84CCD3C /* IOBProjection+CoreDataClass.swift */,
+				1C3EB84EBB7F6D855D76F6BB /* IOBProjection+CoreDataProperties.swift */,
+				8F7EF9ABF68CC151B0512264 /* IOBProjectionValue+CoreDataClass.swift */,
+				3F37657EBECA2A2B0F859A4C /* IOBProjectionValue+CoreDataProperties.swift */,
+				7F2BDB69BADA58E24D09F764 /* COBProjection+CoreDataClass.swift */,
+				6848F6C65979C0F6859C1774 /* COBProjection+CoreDataProperties.swift */,
+				8EB1E080D375137428445243 /* COBProjectionValue+CoreDataClass.swift */,
+				777AD73B6507FCE9820137FE /* COBProjectionValue+CoreDataProperties.swift */,
 				DDE179382C910127003CDDB7 /* ForecastValue+CoreDataClass.swift */,
 				DDE179392C910127003CDDB7 /* ForecastValue+CoreDataProperties.swift */,
 				DDE179342C910127003CDDB7 /* LoopStatRecord+CoreDataClass.swift */,
@@ -4896,6 +4920,14 @@
 				DDE179612C910127003CDDB7 /* StatsData+CoreDataProperties.swift in Sources */,
 				DDE179622C910127003CDDB7 /* Forecast+CoreDataClass.swift in Sources */,
 				DDE179632C910127003CDDB7 /* Forecast+CoreDataProperties.swift in Sources */,
+				EE4B288F5C5E5831BCAE0AB1 /* IOBProjection+CoreDataClass.swift in Sources */,
+				D02162F076BA35D2CCD23F5F /* IOBProjection+CoreDataProperties.swift in Sources */,
+				7F2E134CA33D4DEB623143CE /* IOBProjectionValue+CoreDataClass.swift in Sources */,
+				C2F5DC43C3494A2DBF1DB7D7 /* IOBProjectionValue+CoreDataProperties.swift in Sources */,
+				6A338206C69B8EA99B881E29 /* COBProjection+CoreDataClass.swift in Sources */,
+				12F08FC4CF0C48B65D0AEC9C /* COBProjection+CoreDataProperties.swift in Sources */,
+				C6DEAF203DB9B0E25E5B7A88 /* COBProjectionValue+CoreDataClass.swift in Sources */,
+				A530C17342C20429C09B22C4 /* COBProjectionValue+CoreDataProperties.swift in Sources */,
 				BDC531142D10611D00088832 /* AddContactImageSheet.swift in Sources */,
 				DDE179662C910127003CDDB7 /* OpenAPS_Battery+CoreDataClass.swift in Sources */,
 				DDE179672C910127003CDDB7 /* OpenAPS_Battery+CoreDataProperties.swift in Sources */,
