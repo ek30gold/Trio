@@ -92,6 +92,7 @@ extension MainChartView {
         rawAmount > 0 ? rawAmount * 8 : rawAmount * 9
     }
 
+    @ChartContentBuilder
     func drawCOBIOBChart() -> some ChartContent {
         // Filter out duplicate entries by `deliverAt`,
         // We sometimes get two determinations when editing carbs, one without the entry-to-be-edited and then another one after editing the entry.
@@ -110,7 +111,7 @@ extension MainChartView {
             return true
         }
 
-        return ForEach(filteredDeterminations) { item in
+        ForEach(filteredDeterminations) { item in
 
             // MARK: - COB line and area mark
 
@@ -137,6 +138,57 @@ extension MainChartView {
             LineMark(x: .value("Time", date), y: .value("Amount", amountIOB))
                 .foregroundStyle(by: .value("Type", "IOB"))
                 .position(by: .value("Axis", "IOB"))
+        }
+
+        // MARK: - Projected future COB/IOB marks
+
+        // `timeForForecastIndex` anchors on `state.determinationsFromPersistence.first?.deliverAt`,
+        // falling back to `.distantPast` when no determination exists. Skip the whole projection
+        // block rather than plotting marks anchored in the distant past.
+        let projectionAnchor = timeForForecastIndex(0)
+        let isProjectionAnchorValid = projectionAnchor > Date(timeIntervalSinceNow: TimeInterval(hours: -24))
+
+        if isProjectionAnchorValid {
+            let filteredIobProjectionData = state.iobProjectionData.filter {
+                timeForForecastIndex($0.iobProjectionValue.index) < state.endMarker
+            }
+
+            ForEach(filteredIobProjectionData, id: \.id) { entry in
+
+                // MARK: - Projected IOB line and area mark
+
+                let projectedDate = timeForForecastIndex(entry.iobProjectionValue.index)
+                let rawAmount = entry.iobProjectionValue.value?.doubleValue ?? 0
+                let amountIOB: Double = scaleIobAmountForChart(rawAmount)
+
+                AreaMark(x: .value("Time", projectedDate), y: .value("Amount", amountIOB))
+                    .foregroundStyle(by: .value("Type", "IOB"))
+                    .position(by: .value("Axis", "IOB"))
+                    .opacity(0.2)
+                LineMark(x: .value("Time", projectedDate), y: .value("Amount", amountIOB))
+                    .foregroundStyle(by: .value("Type", "IOB"))
+                    .position(by: .value("Axis", "IOB"))
+            }
+
+            let filteredCobProjectionData = state.cobProjectionData.filter {
+                timeForForecastIndex($0.cobProjectionValue.index) < state.endMarker
+            }
+
+            ForEach(filteredCobProjectionData, id: \.id) { entry in
+
+                // MARK: - Projected COB line and area mark
+
+                let projectedDate = timeForForecastIndex(entry.cobProjectionValue.index)
+                let amountCOB = Int(entry.cobProjectionValue.value?.doubleValue ?? 0)
+
+                LineMark(x: .value("Time", projectedDate), y: .value("Value", amountCOB))
+                    .foregroundStyle(by: .value("Type", "COB"))
+                    .position(by: .value("Axis", "COB"))
+                AreaMark(x: .value("Time", projectedDate), y: .value("Value", amountCOB))
+                    .foregroundStyle(by: .value("Type", "COB"))
+                    .position(by: .value("Axis", "COB"))
+                    .opacity(0.2)
+            }
         }
     }
 }
