@@ -39,6 +39,7 @@ public extension OrefDetermination {
     @NSManaged var timestampEnacted: Date?
     @NSManaged var forecasts: Set<Forecast>?
     @NSManaged var iobProjections: Set<IOBProjection>?
+    @NSManaged var cobProjections: Set<COBProjection>?
 }
 
 // MARK: Generated accessors for forecasts
@@ -71,6 +72,22 @@ public extension OrefDetermination {
 
     @objc(removeIobProjections:)
     @NSManaged func removeFromIobProjections(_ values: NSSet)
+}
+
+// MARK: Generated accessors for cobProjections
+
+public extension OrefDetermination {
+    @objc(addCobProjectionsObject:)
+    @NSManaged func addToCobProjections(_ value: COBProjection)
+
+    @objc(removeCobProjectionsObject:)
+    @NSManaged func removeFromCobProjections(_ value: COBProjection)
+
+    @objc(addCobProjections:)
+    @NSManaged func addToCobProjections(_ values: NSSet)
+
+    @objc(removeCobProjections:)
+    @NSManaged func removeFromCobProjections(_ values: NSSet)
 }
 
 extension OrefDetermination: Identifiable {}
