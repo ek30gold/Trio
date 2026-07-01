@@ -79,12 +79,11 @@ struct MainChartView: View {
     var predictedCOBValue: Decimal? {
         guard let selection else { return nil }
         let tolerance: TimeInterval = 150
-        let match = state.preprocessedData.first {
-            $0.forecast.type == "cob" &&
-            abs(timeForForecastIndex($0.forecastValue.index).timeIntervalSince(selection)) <= tolerance
+        let match = state.cobProjectionData.first {
+            abs(timeForForecastIndex($0.cobProjectionValue.index).timeIntervalSince(selection)) <= tolerance
         }
         guard let match else { return nil }
-        return Decimal(match.forecastValue.value)
+        return match.cobProjectionValue.value?.decimalValue
     }
 
     var predictedGlucoseValue: Decimal? {
