@@ -171,7 +171,7 @@ final class OpenAPS {
         return jsonConverter.convertToJSON(algorithmGlucose)
     }
 
-    private func fetchAndProcessCarbs(additionalCarbs: Decimal? = nil, carbsDate: Date? = nil) async throws -> String {
+    private func fetchAndProcessCarbs(additionalCarbs: Decimal? = nil, carbsDate: Date? = nil) async throws -> (String, Date?) {
         let results = try await CoreDataStack.shared.fetchEntitiesAsync(
             ofType: CarbEntryStored.self,
             onContext: context,
@@ -180,7 +180,7 @@ final class OpenAPS {
             ascending: false
         )
 
-        let json = try await context.perform {
+        let (json, latestCarbDate) = try await context.perform { () -> (String, Date?) in
             guard let carbResults = results as? [CarbEntryStored] else {
                 throw CoreDataError.fetchError(function: #function, file: #file)
             }
@@ -217,10 +217,10 @@ final class OpenAPS {
                 }
             }
 
-            return jsonArray
+            return (jsonArray, carbResults.first?.date)
         }
 
-        return json
+        return (json, latestCarbDate)
     }
 
     private func fetchPumpHistoryObjectIDs() async throws -> [NSManagedObjectID]? {
@@ -421,7 +421,7 @@ final class OpenAPS {
         // Await the results of asynchronous tasks
         let (
             pumpHistoryJSON,
-            carbsAsJSON,
+            (carbsAsJSON, latestCarbDate),
             glucoseAsJSON,
             trioCustomOrefVariables,
             profile,
@@ -596,7 +596,7 @@ final class OpenAPS {
         async let getTempTargets = loadFileFromStorageAsync(name: Settings.tempTargets)
 
         // Await the results of asynchronous tasks
-        let (pumpHistoryJSON, carbsAsJSON, glucoseAsJSON, profile, basalProfile, tempTargets) = await (
+        let (pumpHistoryJSON, (carbsAsJSON, _), glucoseAsJSON, profile, basalProfile, tempTargets) = await (
             try parsePumpHistory(await pumpHistoryObjectIDs),
             try carbs,
             try glucose,

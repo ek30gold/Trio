@@ -35,6 +35,7 @@ struct Determination: JSON, Equatable {
     let carbRatio: Decimal?
     let received: Bool?
     var iobProjection: [Decimal]?
+    var latestCarbDate: Date?
 }
 
 struct Predictions: JSON, Equatable {
