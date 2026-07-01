@@ -130,4 +130,48 @@ extension Home.StateModel {
 
         self.iobProjectionData = iobProjectionData
     }
+
+    func preprocessCOBProjectionData() async -> [(
+        id: UUID, cobProjectionID: NSManagedObjectID, cobProjectionValueIDs: [NSManagedObjectID]
+    )] {
+        do {
+            guard let determination = await viewContext.perform({
+                self.enactedAndNonEnactedDeterminations.first
+            }) else {
+                debug(.default, "No determination found for COB projection preprocessing")
+                return []
+            }
+
+            return try await determinationStorage.fetchCOBProjectionHierarchy(
+                for: determination.objectID,
+                in: taskContext
+            )
+        } catch {
+            debug(
+                .default,
+                "\(DebuggingIdentifiers.failed) Failed to preprocess COB projection data: \(error)"
+            )
+            return []
+        }
+    }
+
+    @MainActor func updateCOBProjectionData() async {
+        let cobProjectionDataIDs = await preprocessCOBProjectionData()
+
+        var cobProjectionData = [(id: UUID, cobProjection: COBProjection, cobProjectionValue: COBProjectionValue)]()
+
+        for data in cobProjectionDataIDs {
+            if let cobProjection = try? viewContext.existingObject(with: data.cobProjectionID) as? COBProjection {
+                let values = data.cobProjectionValueIDs.compactMap {
+                    try? viewContext.existingObject(with: $0) as? COBProjectionValue
+                }
+
+                cobProjectionData.append(contentsOf: values.map {
+                    (id: data.id, cobProjection: cobProjection, cobProjectionValue: $0)
+                })
+            }
+        }
+
+        self.cobProjectionData = cobProjectionData
+    }
 }

@@ -16,6 +16,8 @@ protocol DeterminationStorage {
     async throws -> [(id: UUID, forecastID: NSManagedObjectID, forecastValueIDs: [NSManagedObjectID])]
     func fetchIOBProjectionHierarchy(for determinationID: NSManagedObjectID, in context: NSManagedObjectContext)
     async throws -> [(id: UUID, iobProjectionID: NSManagedObjectID, iobProjectionValueIDs: [NSManagedObjectID])]
+    func fetchCOBProjectionHierarchy(for determinationID: NSManagedObjectID, in context: NSManagedObjectContext)
+    async throws -> [(id: UUID, cobProjectionID: NSManagedObjectID, cobProjectionValueIDs: [NSManagedObjectID])]
 }
 
 final class BaseDeterminationStorage: DeterminationStorage, Injectable {
@@ -258,6 +260,34 @@ final class BaseDeterminationStorage: DeterminationStorage, Injectable {
                     id: UUID(),
                     iobProjectionID: iobProjection.objectID,
                     iobProjectionValueIDs: sortedValues.map(\.objectID)
+                )
+            }
+        }
+    }
+
+    func fetchCOBProjectionHierarchy(for determinationID: NSManagedObjectID, in context: NSManagedObjectContext)
+    async throws -> [(id: UUID, cobProjectionID: NSManagedObjectID, cobProjectionValueIDs: [NSManagedObjectID])]
+    {
+        let results = try await CoreDataStack.shared.fetchEntitiesAsync(
+            ofType: COBProjection.self,
+            onContext: context,
+            predicate: NSPredicate(format: "orefDetermination = %@", determinationID),
+            key: "date",
+            ascending: true,
+            relationshipKeyPathsForPrefetching: ["cobProjectionValues"]
+        )
+
+        // Process results entirely within a single context.perform block to avoid data races
+        return await context.perform {
+            guard let cobProjections = results as? [COBProjection] else { return [] }
+
+            // Create and return the result array entirely within this block
+            return cobProjections.map { cobProjection in
+                let sortedValues = (cobProjection.cobProjectionValues ?? []).sorted { $0.index < $1.index }
+                return (
+                    id: UUID(),
+                    cobProjectionID: cobProjection.objectID,
+                    cobProjectionValueIDs: sortedValues.map(\.objectID)
                 )
             }
         }
