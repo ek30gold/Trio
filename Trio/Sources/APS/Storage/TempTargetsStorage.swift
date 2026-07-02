@@ -13,7 +13,7 @@ protocol TempTargetsStorage {
     func fetchForTempTargetPresets() async throws -> [NSManagedObjectID]
     func fetchScheduledTempTargets() async throws -> [NSManagedObjectID]
     func fetchScheduledTempTarget(for targetDate: Date) async throws -> [NSManagedObjectID]
-    func copyRunningTempTarget(_ tempTarget: TempTargetStored) async -> NSManagedObjectID
+    @MainActor func copyRunningTempTarget(_ tempTarget: TempTargetStored) async -> NSManagedObjectID
     func deleteTempTargetPreset(_ objectID: NSManagedObjectID) async
     func loadLatestTempTargetConfigurations(fetchLimit: Int) async throws -> [NSManagedObjectID]
     func syncDate() -> Date
