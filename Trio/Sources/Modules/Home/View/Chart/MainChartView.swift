@@ -61,7 +61,7 @@ struct MainChartView: View {
         return findDetermination(in: range)
     }
 
-    private func timeForForecastIndex(_ index: Int32) -> Date {
+    func timeForForecastIndex(_ index: Int32) -> Date {
         let anchor = state.determinationsFromPersistence.first?.deliverAt ?? .distantPast
         return anchor.addingTimeInterval(TimeInterval(index * 300))
     }
