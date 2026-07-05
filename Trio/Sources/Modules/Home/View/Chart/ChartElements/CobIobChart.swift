@@ -147,21 +147,20 @@ extension MainChartView {
         // Anchor projections on the same historical data source (filteredDeterminations) used above.
         // This ensures projected points are chronologically aligned with historical points.
         let historicalAnchor = filteredDeterminations.first?.deliverAt
-        func projectedDate(forIndex index: Int32) -> Date? {
-            guard let historicalAnchor else { return nil }
-            return historicalAnchor.addingTimeInterval(TimeInterval(index * 300))
+        let projectedDate: (Int32) -> Date? = { index in
+            historicalAnchor.map { $0.addingTimeInterval(TimeInterval(index * 300)) }
         }
 
-        if let projectionAnchorDate = projectedDate(forIndex: 0), projectionAnchorDate > Date(timeIntervalSinceNow: TimeInterval(hours: -24)) {
+        if let projectionAnchorDate = projectedDate(0), projectionAnchorDate > Date(timeIntervalSinceNow: TimeInterval(hours: -24)) {
             let filteredIobProjectionData = state.iobProjectionData
-                .filter { projectedDate(forIndex: $0.iobProjectionValue.index) ?? .distantFuture < state.endMarker }
+                .filter { projectedDate($0.iobProjectionValue.index) ?? .distantFuture < state.endMarker }
                 .sorted { $0.iobProjectionValue.index < $1.iobProjectionValue.index }
 
             ForEach(filteredIobProjectionData, id: \.id) { entry in
 
                 // MARK: - Projected IOB line and area mark
 
-                if let projectedDate = projectedDate(forIndex: entry.iobProjectionValue.index) {
+                if let projectedDate = projectedDate(entry.iobProjectionValue.index) {
                     let rawAmount = entry.iobProjectionValue.value?.doubleValue ?? 0
                     let amountIOB: Double = scaleIobAmountForChart(rawAmount)
 
@@ -176,14 +175,14 @@ extension MainChartView {
             }
 
             let filteredCobProjectionData = state.cobProjectionData
-                .filter { projectedDate(forIndex: $0.cobProjectionValue.index) ?? .distantFuture < state.endMarker }
+                .filter { projectedDate($0.cobProjectionValue.index) ?? .distantFuture < state.endMarker }
                 .sorted { $0.cobProjectionValue.index < $1.cobProjectionValue.index }
 
             ForEach(filteredCobProjectionData, id: \.id) { entry in
 
                 // MARK: - Projected COB line and area mark
 
-                if let projectedDate = projectedDate(forIndex: entry.cobProjectionValue.index) {
+                if let projectedDate = projectedDate(entry.cobProjectionValue.index) {
                     let amountCOB = Int(entry.cobProjectionValue.value?.doubleValue ?? 0)
 
                     LineMark(x: .value("Time", projectedDate), y: .value("Value", amountCOB))
