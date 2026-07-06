@@ -146,7 +146,7 @@ extension MainChartView {
 
         // Anchor projections on the same historical data source (filteredDeterminations) used above.
         // This ensures projected points are chronologically aligned with historical points.
-        let historicalAnchor = filteredDeterminations.first?.deliverAt
+        let historicalAnchor = filteredDeterminations.last?.deliverAt
         let projectedDate: (Int32) -> Date? = { index in
             historicalAnchor.map { $0.addingTimeInterval(TimeInterval(index * 300)) }
         }
