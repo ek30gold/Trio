@@ -92,6 +92,7 @@ extension MainChartView {
         rawAmount > 0 ? rawAmount * 8 : rawAmount * 9
     }
 
+    @ChartContentBuilder
     func drawCOBIOBChart() -> some ChartContent {
         // Filter out duplicate entries by `deliverAt`,
         // We sometimes get two determinations when editing carbs, one without the entry-to-be-edited and then another one after editing the entry.
@@ -109,8 +110,10 @@ extension MainChartView {
             }
             return true
         }
+        // Sort ascending by deliverAt for proper AreaMark continuous fill rendering
+        .sorted { ($0.deliverAt ?? .distantPast) < ($1.deliverAt ?? .distantPast) }
 
-        return ForEach(filteredDeterminations) { item in
+        ForEach(filteredDeterminations) { item in
 
             // MARK: - COB line and area mark
 
@@ -137,6 +140,60 @@ extension MainChartView {
             LineMark(x: .value("Time", date), y: .value("Amount", amountIOB))
                 .foregroundStyle(by: .value("Type", "IOB"))
                 .position(by: .value("Axis", "IOB"))
+        }
+
+        // MARK: - Projected future COB/IOB marks
+
+        // Anchor projections on the same historical data source (filteredDeterminations) used above.
+        // This ensures projected points are chronologically aligned with historical points.
+        let historicalAnchor = filteredDeterminations.last?.deliverAt
+        let projectedDate: (Int32) -> Date? = { index in
+            historicalAnchor.map { $0.addingTimeInterval(TimeInterval(index * 300)) }
+        }
+
+        if let projectionAnchorDate = projectedDate(0), projectionAnchorDate > Date(timeIntervalSinceNow: TimeInterval(hours: -24)) {
+            let filteredIobProjectionData = state.iobProjectionData
+                .filter { projectedDate($0.iobProjectionValue.index) ?? .distantFuture < state.endMarker }
+                .sorted { $0.iobProjectionValue.index < $1.iobProjectionValue.index }
+
+            ForEach(filteredIobProjectionData, id: \.id) { entry in
+
+                // MARK: - Projected IOB line and area mark
+
+                if let projectedDate = projectedDate(entry.iobProjectionValue.index) {
+                    let rawAmount = entry.iobProjectionValue.value?.doubleValue ?? 0
+                    let amountIOB: Double = scaleIobAmountForChart(rawAmount)
+
+                    AreaMark(x: .value("Time", projectedDate), y: .value("Amount", amountIOB))
+                        .foregroundStyle(by: .value("Type", "IOB"))
+                        .position(by: .value("Axis", "IOB"))
+                        .opacity(0.2)
+                    LineMark(x: .value("Time", projectedDate), y: .value("Amount", amountIOB))
+                        .foregroundStyle(by: .value("Type", "IOB"))
+                        .position(by: .value("Axis", "IOB"))
+                }
+            }
+
+            let filteredCobProjectionData = state.cobProjectionData
+                .filter { projectedDate($0.cobProjectionValue.index) ?? .distantFuture < state.endMarker }
+                .sorted { $0.cobProjectionValue.index < $1.cobProjectionValue.index }
+
+            ForEach(filteredCobProjectionData, id: \.id) { entry in
+
+                // MARK: - Projected COB line and area mark
+
+                if let projectedDate = projectedDate(entry.cobProjectionValue.index) {
+                    let amountCOB = Int(entry.cobProjectionValue.value?.doubleValue ?? 0)
+
+                    LineMark(x: .value("Time", projectedDate), y: .value("Value", amountCOB))
+                        .foregroundStyle(by: .value("Type", "COB"))
+                        .position(by: .value("Axis", "COB"))
+                    AreaMark(x: .value("Time", projectedDate), y: .value("Value", amountCOB))
+                        .foregroundStyle(by: .value("Type", "COB"))
+                        .position(by: .value("Axis", "COB"))
+                        .opacity(0.2)
+                }
+            }
         }
     }
 }

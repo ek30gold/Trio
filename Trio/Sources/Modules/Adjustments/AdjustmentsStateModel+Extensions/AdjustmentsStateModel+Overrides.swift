@@ -427,13 +427,10 @@ extension Adjustments.StateModel {
                 return
             }
 
-            var overrideName: String = ""
-
             await disableAllActiveOverrides(createOverrideRunEntry: currentActiveOverride != nil)
 
             try await MainActor.run {
                 guard let override = try viewContext.existingObject(with: firstID) as? OverrideStored else { return }
-                overrideName = override.name ?? ""
                 override.enabled = true
                 override.date = Date()
                 override.isUploadedToNS = false
