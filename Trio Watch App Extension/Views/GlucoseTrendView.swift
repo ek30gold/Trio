@@ -6,7 +6,7 @@ struct GlucoseTrendView: View {
     let isWatchStateDated: Bool
 
     /// Hardcoded toggle for comparing eventualBG placement variants on-device. Not a real settings feature.
-    private let showEventualBGBesideCircle = true
+    private let showEventualBGBesideCircle = false
 
     /// Determines the status color based on the time elapsed since the last loop
     /// - Parameter timeString: The time string representing minutes since last loop (format: "X min")
