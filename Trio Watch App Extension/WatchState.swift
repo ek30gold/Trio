@@ -24,6 +24,7 @@ import WatchConnectivity
     var maxYAxisValue: Decimal = 200
     var cob: String? = "--"
     var iob: String? = "--"
+    var eventualBG: String? = "--"
     var lastLoopTime: String? = "--"
     var overridePresets: [OverridePresetWatch] = []
     var tempTargetPresets: [TempTargetPresetWatch] = []
@@ -471,6 +472,10 @@ import WatchConnectivity
 
         if let cob = message[WatchMessageKeys.cob] as? String {
             self.cob = cob
+        }
+
+        if let eventualBG = message[WatchMessageKeys.eventualBG] as? String {
+            self.eventualBG = eventualBG
         }
 
         if let lastLoopTime = message[WatchMessageKeys.lastLoopTime] as? String {

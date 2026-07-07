@@ -220,6 +220,15 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
                 if let latestDetermination = determinationObjects.first {
                     let cob = NSNumber(value: latestDetermination.cob)
                     watchState.cob = Formatter.integerFormatter.string(from: cob)
+
+                    if let eventualBG = latestDetermination.eventualBG {
+                        let eventualGlucose = eventualBG.decimalValue
+                        if self.units == .mgdL {
+                            watchState.eventualBG = "\(eventualGlucose)"
+                        } else {
+                            watchState.eventualBG = "\(eventualGlucose.formattedAsMmolL)"
+                        }
+                    }
                 }
 
                 // Set override presets with their enabled status
@@ -441,6 +450,7 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
             WatchMessageKeys.delta: state.delta ?? "",
             WatchMessageKeys.iob: state.iob ?? "",
             WatchMessageKeys.cob: state.cob ?? "",
+            WatchMessageKeys.eventualBG: state.eventualBG ?? "",
             WatchMessageKeys.lastLoopTime: state.lastLoopTime ?? "",
             WatchMessageKeys.glucoseValues: state.glucoseValues.map { value in
                 [
