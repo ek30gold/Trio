@@ -5,6 +5,9 @@ struct GlucoseTrendView: View {
     let rotationDegrees: Double
     let isWatchStateDated: Bool
 
+    /// Hardcoded toggle for comparing eventualBG placement variants on-device. Not a real settings feature.
+    private let showEventualBGBesideCircle = true
+
     /// Determines the status color based on the time elapsed since the last loop
     /// - Parameter timeString: The time string representing minutes since last loop (format: "X min")
     /// - Returns: A color indicating the status:
@@ -115,50 +118,117 @@ struct GlucoseTrendView: View {
     }
 
     var body: some View {
-        VStack {
-            ZStack {
-                Circle()
-                    .stroke(statusColor(for: state.lastLoopTime), lineWidth: lineWidth)
-                    .frame(width: circleSize, height: circleSize)
-                    .background(Circle().fill(Color.bgDarkBlue))
-                    .shadow(color: statusColor(for: state.lastLoopTime), radius: shadowRadius)
+        if showEventualBGBesideCircle {
+            // Variant A: eventualBG displayed beside the circle
+            VStack {
+                HStack {
+                    ZStack {
+                        Circle()
+                            .stroke(statusColor(for: state.lastLoopTime), lineWidth: lineWidth)
+                            .frame(width: circleSize, height: circleSize)
+                            .background(Circle().fill(Color.bgDarkBlue))
+                            .shadow(color: statusColor(for: state.lastLoopTime), radius: shadowRadius)
 
-                TrendShape(
-                    isWatchStateDated: isWatchStateDated,
-                    rotationDegrees: rotationDegrees,
-                    deviceType: state.deviceType
-                )
-                .animation(.spring(response: 0.5, dampingFraction: 0.6), value: rotationDegrees)
-                .shadow(color: Color.black.opacity(0.5), radius: 5)
+                        TrendShape(
+                            isWatchStateDated: isWatchStateDated,
+                            rotationDegrees: rotationDegrees,
+                            deviceType: state.deviceType
+                        )
+                        .animation(.spring(response: 0.5, dampingFraction: 0.6), value: rotationDegrees)
+                        .shadow(color: Color.black.opacity(0.5), radius: 5)
 
-                VStack(alignment: .center) {
-                    Text(isWatchStateDated ? "--" : state.currentGlucose)
-                        .fontWeight(.semibold)
-                        .font(currentGlucoseFontSize)
-                        .foregroundStyle(isWatchStateDated ? Color.secondary : state.currentGlucoseColorString.toColor())
+                        VStack(alignment: .center) {
+                            Text(isWatchStateDated ? "--" : state.currentGlucose)
+                                .fontWeight(.semibold)
+                                .font(currentGlucoseFontSize)
+                                .foregroundStyle(
+                                    isWatchStateDated ? Color.secondary : state.currentGlucoseColorString.toColor()
+                                )
 
-                    if let delta = state.delta {
-                        Text(isWatchStateDated ? "--" : delta)
-                            .fontWeight(.semibold)
+                            if let delta = state.delta {
+                                Text(isWatchStateDated ? "--" : delta)
+                                    .fontWeight(.semibold)
+                                    .font(.system(.caption))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+
+                    VStack {
+                        Text("eBG")
+                            .font(.system(.caption2))
+                            .foregroundStyle(.secondary)
+                        Text(isWatchStateDated ? "--" : (state.eventualBG ?? "--"))
                             .font(.system(.caption))
                             .foregroundStyle(.secondary)
                     }
                 }
-            }
 
-            Spacer()
+                Spacer()
 
-            Text(
-                isWatchStateDated ?
-                    String(localized: "STALE DATA", comment: "Information displayed when watch app data outdated or stale.") :
-                    state
-                    .lastLoopTime ?? "--"
-            )
-            .font(.system(size: minutesAgoFontSize))
-            .fontWidth(isWatchStateDated ? .expanded : .standard)
+                Text(
+                    isWatchStateDated ?
+                        String(localized: "STALE DATA", comment: "Information displayed when watch app data outdated or stale.") :
+                        state
+                        .lastLoopTime ?? "--"
+                )
+                .font(.system(size: minutesAgoFontSize))
+                .fontWidth(isWatchStateDated ? .expanded : .standard)
 
-            Spacer()
+                Spacer()
 
-        }.frame(maxWidth: .infinity, maxHeight: .infinity)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            // Variant B: eventualBG displayed above the bottom label
+            VStack {
+                ZStack {
+                    Circle()
+                        .stroke(statusColor(for: state.lastLoopTime), lineWidth: lineWidth)
+                        .frame(width: circleSize, height: circleSize)
+                        .background(Circle().fill(Color.bgDarkBlue))
+                        .shadow(color: statusColor(for: state.lastLoopTime), radius: shadowRadius)
+
+                    TrendShape(
+                        isWatchStateDated: isWatchStateDated,
+                        rotationDegrees: rotationDegrees,
+                        deviceType: state.deviceType
+                    )
+                    .animation(.spring(response: 0.5, dampingFraction: 0.6), value: rotationDegrees)
+                    .shadow(color: Color.black.opacity(0.5), radius: 5)
+
+                    VStack(alignment: .center) {
+                        Text(isWatchStateDated ? "--" : state.currentGlucose)
+                            .fontWeight(.semibold)
+                            .font(currentGlucoseFontSize)
+                            .foregroundStyle(isWatchStateDated ? Color.secondary : state.currentGlucoseColorString.toColor())
+
+                        if let delta = state.delta {
+                            Text(isWatchStateDated ? "--" : delta)
+                                .fontWeight(.semibold)
+                                .font(.system(.caption))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Spacer()
+
+                Text(isWatchStateDated ? "--" : (state.eventualBG ?? "--"))
+                    .font(.system(.caption))
+                    .foregroundStyle(.secondary)
+
+                Text(
+                    isWatchStateDated ?
+                        String(localized: "STALE DATA", comment: "Information displayed when watch app data outdated or stale.") :
+                        state
+                        .lastLoopTime ?? "--"
+                )
+                .font(.system(size: minutesAgoFontSize))
+                .fontWidth(isWatchStateDated ? .expanded : .standard)
+
+                Spacer()
+
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
     }
 }
