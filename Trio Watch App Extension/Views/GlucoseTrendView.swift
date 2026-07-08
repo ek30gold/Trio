@@ -225,6 +225,7 @@ struct GlucoseTrendView: View {
                 )
                 .font(.system(size: minutesAgoFontSize))
                 .fontWidth(isWatchStateDated ? .expanded : .standard)
+                .padding(.bottom, 4)
 
                 Spacer()
 
