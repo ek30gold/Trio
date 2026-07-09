@@ -148,6 +148,10 @@ struct GlucoseTrendView: View {
 
             Spacer()
 
+            Text(isWatchStateDated ? "--" : (state.eventualBG ?? "--"))
+                .font(.system(.caption))
+                .foregroundStyle(.secondary)
+
             Text(
                 isWatchStateDated ?
                     String(localized: "STALE DATA", comment: "Information displayed when watch app data outdated or stale.") :
@@ -156,6 +160,7 @@ struct GlucoseTrendView: View {
             )
             .font(.system(size: minutesAgoFontSize))
             .fontWidth(isWatchStateDated ? .expanded : .standard)
+            .padding(.bottom, 4)
 
             Spacer()
 
