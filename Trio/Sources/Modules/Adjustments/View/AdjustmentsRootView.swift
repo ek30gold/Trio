@@ -16,7 +16,9 @@ extension Adjustments {
         @State var selectedTempTargetPresetID: String?
         @State var selectedOverride: OverrideStored?
         @State var selectedTempTarget: TempTargetStored?
-        @State var isConfirmDeletePresented = false
+        @State var isConfirmOverrideDeletePresented = false
+        @State var isConfirmTempTargetDeletePresented = false
+        @State private var dragTranslation: CGFloat = 0
         @State var isPromptPresented = false
         @State var isRemoveAlertPresented = false
         @State var removeAlert: Alert?
@@ -51,20 +53,14 @@ extension Adjustments {
             ZStack(alignment: .center, content: {
                 VStack {
                     Picker("Adjustment Tabs", selection: $state.selectedTab) {
-                        ForEach(Adjustments.Tab.allCases.indexed(), id: \.1) { index, item in
-                            Text(item.name).tag(index)
+                        ForEach(Adjustments.Tab.allCases) { item in
+                            Text(item.name).tag(item)
                         }
                     }
                     .pickerStyle(SegmentedPickerStyle())
                     .padding(.horizontal)
 
-                    List {
-                        switch state.selectedTab {
-                        case .overrides: overrides()
-                        case .tempTargets: tempTargets() }
-                    }
-                    .scrollContentBackground(.hidden)
-                    .background(appState.trioBackgroundColor(for: colorScheme))
+                    adjustmentsPager
                 }
                 .listSectionSpacing(10)
                 .safeAreaInset(
@@ -194,8 +190,93 @@ extension Adjustments {
             }).background(appState.trioBackgroundColor(for: colorScheme))
         }
 
-        var defaultText: some View {
-            switch state.selectedTab {
+        // MARK: - Horizontal Pager
+
+        /// Fraction of the screen width a drag must exceed to commit a tab change.
+        private static let pageCommitFraction: CGFloat = 1.0 / 3.0
+
+        /// Height of the reserved, gesture-bearing band at the end of each tab's list.
+        private static let swipeBandHeight: CGFloat = 80
+
+        private var adjustmentsPager: some View {
+            GeometryReader { geo in
+                HStack(spacing: 0) {
+                    ForEach(Adjustments.Tab.allCases) { tab in
+                        adjustmentList(for: tab, width: geo.size.width)
+                            .frame(width: geo.size.width)
+                    }
+                }
+                .offset(x: pageOffset(forWidth: geo.size.width))
+                .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.85), value: state.selectedTab)
+            }
+        }
+
+        private func pageOffset(forWidth width: CGFloat) -> CGFloat {
+            let tabs = Adjustments.Tab.allCases
+            let index = CGFloat(tabs.firstIndex(of: state.selectedTab) ?? 0)
+            let lowerBound = -CGFloat(tabs.count - 1) * width
+            return min(0, max(lowerBound, -index * width + dragTranslation))
+        }
+
+        @ViewBuilder private func adjustmentList(for tab: Adjustments.Tab, width: CGFloat) -> some View {
+            List {
+                switch tab {
+                case .overrides: overrides()
+                case .tempTargets: tempTargets()
+                }
+                swipeBand(width: width)
+            }
+            .scrollContentBackground(.hidden)
+            .background(appState.trioBackgroundColor(for: colorScheme))
+        }
+
+        /// A reserved strip at the end of each list that carries the paging gesture.
+        /// It deliberately has no `swipeActions`, so it never contends with the row
+        /// swipe actions used for editing and deleting presets.
+        private func swipeBand(width: CGFloat) -> some View {
+            Section {
+                Color.clear
+                    .frame(height: Self.swipeBandHeight)
+                    .contentShape(Rectangle())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets())
+                    .gesture(pageDragGesture(width: width))
+            }
+        }
+
+        private func pageDragGesture(width: CGFloat) -> some Gesture {
+            DragGesture(minimumDistance: 12)
+                .onChanged { value in
+                    // Ignore predominantly vertical drags so the list can still scroll.
+                    guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                    dragTranslation = value.translation.width
+                }
+                .onEnded { value in
+                    let tabs = Adjustments.Tab.allCases
+                    let currentIndex = tabs.firstIndex(of: state.selectedTab) ?? 0
+                    var targetIndex = currentIndex
+
+                    if abs(value.translation.width) > abs(value.translation.height),
+                       abs(value.predictedEndTranslation.width) > width * Self.pageCommitFraction
+                    {
+                        let candidate = value.predictedEndTranslation.width < 0
+                            ? currentIndex + 1
+                            : currentIndex - 1
+                        if tabs.indices.contains(candidate) {
+                            targetIndex = candidate
+                        }
+                    }
+
+                    withAnimation(.interactiveSpring(response: 0.3, dampingFraction: 0.85)) {
+                        dragTranslation = 0
+                        state.selectedTab = tabs[targetIndex]
+                    }
+                }
+        }
+
+        @ViewBuilder func defaultText(for tab: Adjustments.Tab) -> some View {
+            switch tab {
             case .overrides:
                 Section {} header: {
                     Text("Add Preset or Override by tapping 'Add Override +' in the top right-hand corner of the screen.")
@@ -213,8 +294,8 @@ extension Adjustments {
             }
         }
 
-        var currentActiveAdjustment: some View {
-            switch state.selectedTab {
+        @ViewBuilder func currentActiveAdjustment(for tab: Adjustments.Tab) -> some View {
+            switch tab {
             case .overrides:
                 Section {
                     HStack {
