@@ -964,7 +964,23 @@ extension Treatments.StateModel {
         }
 
         debug(.bolusState, "updateForecasts fired")
-        if let forecastData = forecastData {
+
+        // A mapped `forecastData` describes the last stored loop result and knows nothing about the
+        // entry the user is currently composing. Callers supply it on appear and from the
+        // `OrefDetermination` Core Data sink, which fires on any save of that entity — including
+        // Nightscout flagging a determination as uploaded, which is decoupled from loop timing.
+        //
+        // Accepting it while an entry is pending would drop that entry from the on-board pills and,
+        // for a backdated entry, from the bolus recommendation: `BolusCalculationManager` zeroes the
+        // typed carbs for backdated entries and takes COB entirely from this determination, so a
+        // mapped one silently under-counts the meal. Re-simulate instead, so what is displayed and
+        // what is recommended both stay consistent with what is on screen.
+        //
+        // Fat and protein are deliberately not considered pending input: FPU carb-equivalents are
+        // delivered hours later and `simulateDetermineBasal` takes no FPU parameter.
+        let hasPendingEntry = carbs > 0 || amount > 0
+
+        if let forecastData = forecastData, !hasPendingEntry {
             simulatedDetermination = forecastData
             debugPrint("\(DebuggingIdentifiers.failed) minPredBG: \(minPredBG)")
         } else {
