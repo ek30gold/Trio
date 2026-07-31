@@ -18,7 +18,8 @@ extension Adjustments {
         @State var selectedTempTarget: TempTargetStored?
         @State var isConfirmOverrideDeletePresented = false
         @State var isConfirmTempTargetDeletePresented = false
-        @State private var dragTranslation: CGFloat = 0
+        @GestureState private var dragTranslation: CGFloat = 0
+        @State private var isDraggingPage = false
         @State var isPromptPresented = false
         @State var isRemoveAlertPresented = false
         @State var removeAlert: Alert?
@@ -198,24 +199,44 @@ extension Adjustments {
         /// Height of the reserved, gesture-bearing band at the end of each tab's list.
         private static let swipeBandHeight: CGFloat = 80
 
+        /// How much of an over-drag past the first or last tab is actually shown.
+        private static let edgeResistance: CGFloat = 0.25
+
         private var adjustmentsPager: some View {
             GeometryReader { geo in
+                let width = geo.size.width
+
                 HStack(spacing: 0) {
                     ForEach(Adjustments.Tab.allCases) { tab in
-                        adjustmentList(for: tab, width: geo.size.width)
-                            .frame(width: geo.size.width)
+                        adjustmentList(for: tab, width: width)
+                            .frame(width: width)
                     }
                 }
-                .offset(x: pageOffset(forWidth: geo.size.width))
-                .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.85), value: state.selectedTab)
+                .offset(x: pageOffset(forWidth: width))
+                // While the finger is down the offset must track it exactly, so animation is
+                // suppressed. Once the gesture ends — whether it commits or springs back — the
+                // same modifier animates the offset to its resting place.
+                .animation(
+                    isDraggingPage ? nil : .interactiveSpring(response: 0.32, dampingFraction: 0.86),
+                    value: pageOffset(forWidth: width)
+                )
             }
         }
 
+        /// Resting offset for the selected tab, plus the live drag, with iOS-style
+        /// resistance rather than a hard stop when dragging past either end.
         private func pageOffset(forWidth width: CGFloat) -> CGFloat {
             let tabs = Adjustments.Tab.allCases
             let index = CGFloat(tabs.firstIndex(of: state.selectedTab) ?? 0)
             let lowerBound = -CGFloat(tabs.count - 1) * width
-            return min(0, max(lowerBound, -index * width + dragTranslation))
+            let offset = -index * width + dragTranslation
+
+            if offset > 0 {
+                return offset * Self.edgeResistance
+            } else if offset < lowerBound {
+                return lowerBound + (offset - lowerBound) * Self.edgeResistance
+            }
+            return offset
         }
 
         @ViewBuilder private func adjustmentList(for tab: Adjustments.Tab, width: CGFloat) -> some View {
@@ -241,37 +262,44 @@ extension Adjustments {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets())
-                    .gesture(pageDragGesture(width: width))
+                    // `simultaneousGesture`, not `gesture`: a plain `.gesture` is the lowest
+                    // priority attachment and loses left-to-right drags to the enclosing
+                    // navigation controller's interactive-pop recognizer, which made the
+                    // Temp Targets -> Overrides direction fail while the reverse worked.
+                    .simultaneousGesture(pageDragGesture(width: width))
             }
         }
 
         private func pageDragGesture(width: CGFloat) -> some Gesture {
-            DragGesture(minimumDistance: 12)
-                .onChanged { value in
-                    // Ignore predominantly vertical drags so the list can still scroll.
-                    guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                    dragTranslation = value.translation.width
+            DragGesture(minimumDistance: 10)
+                // `updating` drives the offset from gesture-owned state, so SwiftUI resets it
+                // automatically when the gesture ends *or is cancelled*. The previous `@State`
+                // version only reset in `onEnded`, so a drag that the list's scroll view stole
+                // left the pager stuck at a partial offset and corrupted every later swipe.
+                .updating($dragTranslation) { value, translation, transaction in
+                    transaction.disablesAnimations = true
+                    translation = value.translation.width
+                }
+                .onChanged { _ in
+                    if !isDraggingPage {
+                        isDraggingPage = true
+                    }
                 }
                 .onEnded { value in
+                    isDraggingPage = false
+
+                    // A predominantly vertical drag has a near-zero width component and so
+                    // fails this threshold on its own — no axis test needed, and none of the
+                    // per-frame stutter the previous cumulative axis guard introduced.
+                    let travel = value.predictedEndTranslation.width
+                    guard abs(travel) > width * Self.pageCommitFraction else { return }
+
                     let tabs = Adjustments.Tab.allCases
                     let currentIndex = tabs.firstIndex(of: state.selectedTab) ?? 0
-                    var targetIndex = currentIndex
+                    let candidate = travel < 0 ? currentIndex + 1 : currentIndex - 1
+                    guard tabs.indices.contains(candidate) else { return }
 
-                    if abs(value.translation.width) > abs(value.translation.height),
-                       abs(value.predictedEndTranslation.width) > width * Self.pageCommitFraction
-                    {
-                        let candidate = value.predictedEndTranslation.width < 0
-                            ? currentIndex + 1
-                            : currentIndex - 1
-                        if tabs.indices.contains(candidate) {
-                            targetIndex = candidate
-                        }
-                    }
-
-                    withAnimation(.interactiveSpring(response: 0.3, dampingFraction: 0.85)) {
-                        dragTranslation = 0
-                        state.selectedTab = tabs[targetIndex]
-                    }
+                    state.selectedTab = tabs[candidate]
                 }
         }
 
