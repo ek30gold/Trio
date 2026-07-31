@@ -36,16 +36,34 @@ struct ForecastChart: View {
     }
 
     private var forecastChartLabels: some View {
-        // Check if this is a backdated entry by comparing with the default date using a tolerance
-        let isBackdated = abs(state.date.timeIntervalSince(state.defaultDate)) > 1.0
+        // The carb and insulin pills show projected carbs and insulin on board, i.e. what will be
+        // on board once the pending entry is submitted, not a mirror of the input fields.
+        //
+        // `simulatedDetermination` has two writers: a `simulateDetermineBasal` run, which accounts
+        // for the pending entry, and `mapForecastsForChart()`, which supplies the last stored
+        // determination and does not. `updateForecasts(with:)` only accepts the latter when no
+        // entry is pending, so whenever there is something to fold in these values include it.
+        // Falling back to the last real determination keeps them showing a real number when no
+        // determination has been simulated at all.
+        let displayedCOB = state.simulatedDetermination?.cob ?? Decimal(state.cob)
+        let displayedIOB = state.simulatedDetermination?.iob ?? state.iob
 
-        // When backdated, display no carbs as this label is only supposed to show current entered carbs
-        let displayedCarbs = isBackdated ? 0 : state.carbs
+        let cobValue = Formatter.integerFormatter.string(from: displayedCOB as NSNumber) ?? "0"
+        let iobValue = Formatter.decimalFormatterWithTwoFractionDigits
+            .string(from: displayedIOB as NSNumber) ?? displayedIOB.description
+
+        // Keep the original `Text` shapes. An interpolated string literal is a `LocalizedStringKey`,
+        // so these are catalog lookups carrying locale-specific spacing: "%@ g" is translated as a
+        // unit, and "%@ " drops its trailing space in German precisely because "U" is translated
+        // there as " IE" with a leading one. Composing the strings by hand instead would lose the
+        // space in the carb pill and double it in the insulin pill.
+        let cobText = Text("\(cobValue) g")
+        let iobText = Text("\(iobValue) ") + Text(String(localized: "U", comment: "Insulin unit"))
 
         return HStack {
             HStack {
                 Image(systemName: "fork.knife")
-                Text("\(displayedCarbs.description) g")
+                cobText
             }
             .font(.footnote)
             .foregroundStyle(.orange)
@@ -54,14 +72,18 @@ struct ForecastChart: View {
                 RoundedRectangle(cornerRadius: 10)
                     .fill(Color.orange.opacity(0.2))
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(String(
+                localized: "Carbs on Board",
+                comment: "Accessibility label for the projected COB pill on the Treatments view"
+            ))
+            .accessibilityValue(cobText)
 
             Spacer()
 
             HStack {
                 Image(systemName: "syringe.fill")
-                Text(
-                    "\(Formatter.bolusFormatter.string(from: state.amount as NSNumber) ?? state.amount.description) "
-                ) + Text(String(localized: "U", comment: "Insulin unit"))
+                iobText
             }
 
             .font(.footnote)
@@ -71,6 +93,12 @@ struct ForecastChart: View {
                 RoundedRectangle(cornerRadius: 10)
                     .fill(Color.blue.opacity(0.2))
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(String(
+                localized: "Insulin on Board",
+                comment: "Accessibility label for the projected IOB pill on the Treatments view"
+            ))
+            .accessibilityValue(iobText)
 
             Spacer()
 
