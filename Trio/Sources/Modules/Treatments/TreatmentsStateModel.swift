@@ -111,6 +111,10 @@ extension Treatments {
         var preprocessedData: [(id: UUID, forecast: Forecast, forecastValue: ForecastValue)] = []
         var predictionsForChart: Predictions?
         var simulatedDetermination: Determination?
+        /// Monotonic token identifying the most recent `updateForecasts` run. A run that finds the
+        /// token changed after awaiting has been superseded and must discard its results, so a slow
+        /// simulation cannot overwrite a newer one's determination or forecast arrays.
+        @MainActor private var forecastGeneration: UInt64 = 0
         @MainActor var determinationObjectIDs: [NSManagedObjectID] = []
 
         var minForecast: [Int] = []
@@ -965,6 +969,15 @@ extension Treatments.StateModel {
 
         debug(.bolusState, "updateForecasts fired")
 
+        // Claim a generation for this run. Callers are not serialized — the Core Data sink, the
+        // debounced carb field, the un-debounced bolus field and the date picker can all be in
+        // flight at once — and a simulation takes long enough that they overlap in practice. Any
+        // run whose generation is no longer current has been superseded and must not publish its
+        // results, otherwise a stale simulation can overwrite a newer one and leave a determination
+        // on screen that does not match the entry.
+        forecastGeneration &+= 1
+        let generation = forecastGeneration
+
         // A mapped `forecastData` describes the last stored loop result and knows nothing about the
         // entry the user is currently composing. Callers supply it on appear and from the
         // `OrefDetermination` Core Data sink, which fires on any save of that entity — including
@@ -984,7 +997,7 @@ extension Treatments.StateModel {
             simulatedDetermination = forecastData
             debugPrint("\(DebuggingIdentifiers.failed) minPredBG: \(minPredBG)")
         } else {
-            simulatedDetermination = await Task { [self] in
+            let simulationResult = await Task { [self] in
                 debug(.bolusState, "calling simulateDetermineBasal to get forecast data")
                 return await apsManager.simulateDetermineBasal(
                     simulatedCarbsAmount: carbs,
@@ -992,6 +1005,12 @@ extension Treatments.StateModel {
                     simulatedCarbsDate: date
                 )
             }.value
+
+            guard generation == forecastGeneration else {
+                return debug(.bolusState, "discarding superseded forecast simulation")
+            }
+
+            simulatedDetermination = simulationResult
 
             // Update evBG and minPredBG from simulated determination
             if let simDetermination = simulatedDetermination {
@@ -1033,8 +1052,17 @@ extension Treatments.StateModel {
             }
         }.value
 
-        minForecast = await minForecastResult
-        maxForecast = await maxForecastResult
+        // Await both before publishing either, so the cone is always drawn from a single run rather
+        // than a min from one and a max from another.
+        let newMinForecast = await minForecastResult
+        let newMaxForecast = await maxForecastResult
+
+        guard generation == forecastGeneration else {
+            return debug(.bolusState, "discarding superseded forecast bounds")
+        }
+
+        minForecast = newMinForecast
+        maxForecast = newMaxForecast
     }
 }
 

@@ -39,11 +39,10 @@ struct ForecastChart: View {
         // The carb and insulin pills show projected carbs and insulin on board, i.e. what will be
         // on board once the pending entry is submitted, not a mirror of the input fields.
         //
-        // `simulatedDetermination` has two writers, and only one of them accounts for the pending
-        // entry: the `simulateDetermineBasal` run triggered by a carb, bolus or time change does,
-        // while `mapForecastsForChart()` — which supplies the last stored determination on appear
-        // and on every loop tick — does not. Between a loop tick and the next field edit these
-        // pills therefore show current on-board values without the pending entry folded in.
+        // `simulatedDetermination` has two writers: a `simulateDetermineBasal` run, which accounts
+        // for the pending entry, and `mapForecastsForChart()`, which supplies the last stored
+        // determination and does not. `updateForecasts(with:)` only accepts the latter when no
+        // entry is pending, so whenever there is something to fold in these values include it.
         // Falling back to the last real determination keeps them showing a real number when no
         // determination has been simulated at all.
         let displayedCOB = state.simulatedDetermination?.cob ?? Decimal(state.cob)
