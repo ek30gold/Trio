@@ -19,7 +19,7 @@ extension Adjustments {
         @State var isConfirmOverrideDeletePresented = false
         @State var isConfirmTempTargetDeletePresented = false
         @GestureState private var dragTranslation: CGFloat = 0
-        @State private var isDraggingPage = false
+        @GestureState private var isDraggingPage = false
         @State var isPromptPresented = false
         @State var isRemoveAlertPresented = false
         @State var removeAlert: Alert?
@@ -280,14 +280,15 @@ extension Adjustments {
                     transaction.disablesAnimations = true
                     translation = value.translation.width
                 }
-                .onChanged { _ in
-                    if !isDraggingPage {
-                        isDraggingPage = true
-                    }
+                // Also gesture-owned rather than `@State`, so that it and `dragTranslation`
+                // are reset by the same mechanism when the gesture finishes. Tying the
+                // animation gate to `onEnded` instead would assume that closure's writes land
+                // in the same render pass as the automatic reset, which is not guaranteed —
+                // and a one-frame mismatch is visible as an overshoot before the spring.
+                .updating($isDraggingPage) { _, isDragging, _ in
+                    isDragging = true
                 }
                 .onEnded { value in
-                    isDraggingPage = false
-
                     // A predominantly vertical drag has a near-zero width component and so
                     // fails this threshold on its own — no axis test needed, and none of the
                     // per-frame stutter the previous cumulative axis guard introduced.
