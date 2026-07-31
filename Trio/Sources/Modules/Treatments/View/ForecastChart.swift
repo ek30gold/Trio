@@ -38,18 +38,27 @@ struct ForecastChart: View {
     private var forecastChartLabels: some View {
         // The carb and insulin pills show projected carbs and insulin on board, i.e. what will be
         // on board once the pending entry is submitted, not a mirror of the input fields.
-        // `simulatedDetermination` is recomputed via `simulateDetermineBasal` on every carb, bolus
-        // and time change, so its `cob`/`iob` already account for absorption and backdating.
-        // Fall back to the last real determination's values if no simulation has been produced yet.
+        //
+        // `simulatedDetermination` has two writers, and only one of them accounts for the pending
+        // entry: the `simulateDetermineBasal` run triggered by a carb, bolus or time change does,
+        // while `mapForecastsForChart()` — which supplies the last stored determination on appear
+        // and on every loop tick — does not. Between a loop tick and the next field edit these
+        // pills therefore show current on-board values without the pending entry folded in.
+        // Falling back to the last real determination keeps them showing a real number when no
+        // determination has been simulated at all.
         let displayedCOB = state.simulatedDetermination?.cob ?? Decimal(state.cob)
         let displayedIOB = state.simulatedDetermination?.iob ?? state.iob
+
+        let cobValue = Formatter.integerFormatter.string(from: displayedCOB as NSNumber) ?? "0"
+        let iobValue = Formatter.decimalFormatterWithTwoFractionDigits
+            .string(from: displayedIOB as NSNumber) ?? displayedIOB.description
+        let carbUnit = String(localized: "g", comment: "Units for carbs")
+        let insulinUnit = String(localized: "U", comment: "Insulin unit")
 
         return HStack {
             HStack {
                 Image(systemName: "fork.knife")
-                Text(
-                    "\(Formatter.integerFormatter.string(from: displayedCOB as NSNumber) ?? "0") "
-                ) + Text(String(localized: "g", comment: "Units for carbs"))
+                Text("\(cobValue) ") + Text(carbUnit)
             }
             .font(.footnote)
             .foregroundStyle(.orange)
@@ -60,17 +69,16 @@ struct ForecastChart: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(String(
-                localized: "Carbs on board",
+                localized: "Carbs on Board",
                 comment: "Accessibility label for the projected COB pill on the Treatments view"
             ))
+            .accessibilityValue("\(cobValue) \(carbUnit)")
 
             Spacer()
 
             HStack {
                 Image(systemName: "syringe.fill")
-                Text(
-                    "\(Formatter.bolusFormatter.string(from: displayedIOB as NSNumber) ?? displayedIOB.description) "
-                ) + Text(String(localized: "U", comment: "Insulin unit"))
+                Text("\(iobValue) ") + Text(insulinUnit)
             }
 
             .font(.footnote)
@@ -82,9 +90,10 @@ struct ForecastChart: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(String(
-                localized: "Insulin on board",
+                localized: "Insulin on Board",
                 comment: "Accessibility label for the projected IOB pill on the Treatments view"
             ))
+            .accessibilityValue("\(iobValue) \(insulinUnit)")
 
             Spacer()
 
