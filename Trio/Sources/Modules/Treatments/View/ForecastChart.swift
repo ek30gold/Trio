@@ -52,13 +52,19 @@ struct ForecastChart: View {
         let cobValue = Formatter.integerFormatter.string(from: displayedCOB as NSNumber) ?? "0"
         let iobValue = Formatter.decimalFormatterWithTwoFractionDigits
             .string(from: displayedIOB as NSNumber) ?? displayedIOB.description
-        let carbUnit = String(localized: "g", comment: "Units for carbs")
-        let insulinUnit = String(localized: "U", comment: "Insulin unit")
+
+        // Keep the original `Text` shapes. An interpolated string literal is a `LocalizedStringKey`,
+        // so these are catalog lookups carrying locale-specific spacing: "%@ g" is translated as a
+        // unit, and "%@ " drops its trailing space in German precisely because "U" is translated
+        // there as " IE" with a leading one. Composing the strings by hand instead would lose the
+        // space in the carb pill and double it in the insulin pill.
+        let cobText = Text("\(cobValue) g")
+        let iobText = Text("\(iobValue) ") + Text(String(localized: "U", comment: "Insulin unit"))
 
         return HStack {
             HStack {
                 Image(systemName: "fork.knife")
-                Text("\(cobValue) ") + Text(carbUnit)
+                cobText
             }
             .font(.footnote)
             .foregroundStyle(.orange)
@@ -72,13 +78,13 @@ struct ForecastChart: View {
                 localized: "Carbs on Board",
                 comment: "Accessibility label for the projected COB pill on the Treatments view"
             ))
-            .accessibilityValue("\(cobValue) \(carbUnit)")
+            .accessibilityValue(cobText)
 
             Spacer()
 
             HStack {
                 Image(systemName: "syringe.fill")
-                Text("\(iobValue) ") + Text(insulinUnit)
+                iobText
             }
 
             .font(.footnote)
@@ -93,7 +99,7 @@ struct ForecastChart: View {
                 localized: "Insulin on Board",
                 comment: "Accessibility label for the projected IOB pill on the Treatments view"
             ))
-            .accessibilityValue("\(iobValue) \(insulinUnit)")
+            .accessibilityValue(iobText)
 
             Spacer()
 
