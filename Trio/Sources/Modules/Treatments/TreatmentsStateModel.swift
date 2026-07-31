@@ -896,6 +896,9 @@ extension Treatments.StateModel {
                     uam: forecastsSet.extractValues(for: "uam")
                 )
 
+                // Carry the stored determination's real IOB/COB rather than zeros: this object is
+                // assigned to `simulatedDetermination`, which feeds both the Treatments view's
+                // on-board pills and the backdated-entry COB used by `calculateInsulin()`.
                 return Determination(
                     id: UUID(),
                     reason: "",
@@ -904,8 +907,8 @@ extension Treatments.StateModel {
                     sensitivityRatio: 0,
                     rate: 0,
                     duration: 0,
-                    iob: 0,
-                    cob: 0,
+                    iob: (determinationObject?.iob ?? 0) as Decimal,
+                    cob: Decimal(determinationObject?.cob ?? 0),
                     predictions: predictions.isEmpty ? nil : predictions,
                     carbsReq: 0,
                     temp: nil,

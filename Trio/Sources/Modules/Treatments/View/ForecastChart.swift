@@ -36,16 +36,20 @@ struct ForecastChart: View {
     }
 
     private var forecastChartLabels: some View {
-        // Check if this is a backdated entry by comparing with the default date using a tolerance
-        let isBackdated = abs(state.date.timeIntervalSince(state.defaultDate)) > 1.0
-
-        // When backdated, display no carbs as this label is only supposed to show current entered carbs
-        let displayedCarbs = isBackdated ? 0 : state.carbs
+        // The carb and insulin pills show projected carbs and insulin on board, i.e. what will be
+        // on board once the pending entry is submitted, not a mirror of the input fields.
+        // `simulatedDetermination` is recomputed via `simulateDetermineBasal` on every carb, bolus
+        // and time change, so its `cob`/`iob` already account for absorption and backdating.
+        // Fall back to the last real determination's values if no simulation has been produced yet.
+        let displayedCOB = state.simulatedDetermination?.cob ?? Decimal(state.cob)
+        let displayedIOB = state.simulatedDetermination?.iob ?? state.iob
 
         return HStack {
             HStack {
                 Image(systemName: "fork.knife")
-                Text("\(displayedCarbs.description) g")
+                Text(
+                    "\(Formatter.integerFormatter.string(from: displayedCOB as NSNumber) ?? "0") "
+                ) + Text(String(localized: "g", comment: "Units for carbs"))
             }
             .font(.footnote)
             .foregroundStyle(.orange)
@@ -54,13 +58,18 @@ struct ForecastChart: View {
                 RoundedRectangle(cornerRadius: 10)
                     .fill(Color.orange.opacity(0.2))
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(String(
+                localized: "Carbs on board",
+                comment: "Accessibility label for the projected COB pill on the Treatments view"
+            ))
 
             Spacer()
 
             HStack {
                 Image(systemName: "syringe.fill")
                 Text(
-                    "\(Formatter.bolusFormatter.string(from: state.amount as NSNumber) ?? state.amount.description) "
+                    "\(Formatter.bolusFormatter.string(from: displayedIOB as NSNumber) ?? displayedIOB.description) "
                 ) + Text(String(localized: "U", comment: "Insulin unit"))
             }
 
@@ -71,6 +80,11 @@ struct ForecastChart: View {
                 RoundedRectangle(cornerRadius: 10)
                     .fill(Color.blue.opacity(0.2))
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(String(
+                localized: "Insulin on board",
+                comment: "Accessibility label for the projected IOB pill on the Treatments view"
+            ))
 
             Spacer()
 
