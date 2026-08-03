@@ -2,6 +2,33 @@ import CoreData
 import SwiftUI
 import Swinject
 
+/// Disables the enclosing `UINavigationController`'s edge-swipe-to-pop gesture.
+/// Adjustments is the root of its own tab-specific `NavigationStack` with no push
+/// destinations, so the pop gesture has nothing to do — but left enabled, it still
+/// claims rightward drags before the paging gesture below sees them, which is what
+/// made swiping from Temp Targets back to Overrides fail while the reverse
+/// direction worked.
+///
+/// This assumes Adjustments never gains a `navigationDestination`/`NavigationLink` of
+/// its own — if one is ever added, its back-swipe would be silently disabled by this
+/// with no compiler warning. Remove this struct and its `.background(...)` call site
+/// below if that changes.
+private struct DisableInteractivePopGesture: UIViewControllerRepresentable {
+    func makeUIViewController(context _: Context) -> UIViewController {
+        UIViewController()
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context _: Context) {
+        DispatchQueue.main.async {
+            // `.navigationController` walks the full ancestor chain itself; going through
+            // `.parent` first would only check one level up and could miss the navigation
+            // controller if SwiftUI inserts more than one wrapper between this controller
+            // and it.
+            uiViewController.navigationController?.interactivePopGestureRecognizer?.isEnabled = false
+        }
+    }
+}
+
 extension Adjustments {
     struct RootView: BaseView {
         let resolver: Resolver
@@ -188,7 +215,9 @@ extension Adjustments {
                         Text(activation.confirmationMessage)
                     }
                 }
-            }).background(appState.trioBackgroundColor(for: colorScheme))
+            })
+                .background(appState.trioBackgroundColor(for: colorScheme))
+                .background(DisableInteractivePopGesture())
         }
 
         // MARK: - Horizontal Pager
@@ -262,11 +291,14 @@ extension Adjustments {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets())
-                    // `simultaneousGesture`, not `gesture`: a plain `.gesture` is the lowest
-                    // priority attachment and loses left-to-right drags to the enclosing
-                    // navigation controller's interactive-pop recognizer, which made the
-                    // Temp Targets -> Overrides direction fail while the reverse worked.
-                    .simultaneousGesture(pageDragGesture(width: width))
+                    // `highPriorityGesture`, not `simultaneousGesture`: simultaneous only
+                    // guarantees this gesture isn't cancelled by the List's own scroll pan
+                    // recognizer, not that it wins the race against it — so recognition was
+                    // inconsistent, winning or losing depending on touch timing. High-priority
+                    // resolves that race in this gesture's favor. The navigation controller's
+                    // edge-swipe-to-pop recognizer is handled separately, via
+                    // `DisableInteractivePopGesture` at the top of this file.
+                    .highPriorityGesture(pageDragGesture(width: width))
             }
         }
 
