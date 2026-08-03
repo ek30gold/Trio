@@ -45,8 +45,6 @@ extension Adjustments {
         @State var selectedTempTarget: TempTargetStored?
         @State var isConfirmOverrideDeletePresented = false
         @State var isConfirmTempTargetDeletePresented = false
-        @GestureState private var dragTranslation: CGFloat = 0
-        @GestureState private var isDraggingPage = false
         @State var isPromptPresented = false
         @State var isRemoveAlertPresented = false
         @State var removeAlert: Alert?
@@ -222,118 +220,34 @@ extension Adjustments {
 
         // MARK: - Horizontal Pager
 
-        /// Fraction of the screen width a drag must exceed to commit a tab change.
-        private static let pageCommitFraction: CGFloat = 1.0 / 3.0
-
-        /// Height of the reserved, gesture-bearing band at the end of each tab's list.
-        private static let swipeBandHeight: CGFloat = 80
-
-        /// How much of an over-drag past the first or last tab is actually shown.
-        private static let edgeResistance: CGFloat = 0.25
-
+        /// Native paging rather than a hand-rolled `DragGesture`. SwiftUI's gesture-priority
+        /// modifiers (`gesture` / `simultaneousGesture` / `highPriorityGesture`) arbitrate only
+        /// among SwiftUI gestures and cannot outrank the UIKit pan recognizer backing `List`,
+        /// so the previous custom drag was unreliable. A paging `TabView` is driven by UIKit's
+        /// own paging scroll view, which coordinates with the nested vertical lists natively.
+        ///
+        /// Preset rows keep their `swipeActions`, so a horizontal drag starting on a row is
+        /// claimed by that row; paging responds everywhere else — section headers, empty space,
+        /// and the running-adjustment banner.
         private var adjustmentsPager: some View {
-            GeometryReader { geo in
-                let width = geo.size.width
-
-                HStack(spacing: 0) {
-                    ForEach(Adjustments.Tab.allCases) { tab in
-                        adjustmentList(for: tab, width: width)
-                            .frame(width: width)
-                    }
+            TabView(selection: $state.selectedTab) {
+                ForEach(Adjustments.Tab.allCases) { tab in
+                    adjustmentList(for: tab)
+                        .tag(tab)
                 }
-                .offset(x: pageOffset(forWidth: width))
-                // While the finger is down the offset must track it exactly, so animation is
-                // suppressed. Once the gesture ends — whether it commits or springs back — the
-                // same modifier animates the offset to its resting place.
-                .animation(
-                    isDraggingPage ? nil : .interactiveSpring(response: 0.32, dampingFraction: 0.86),
-                    value: pageOffset(forWidth: width)
-                )
             }
+            .tabViewStyle(.page(indexDisplayMode: .never))
         }
 
-        /// Resting offset for the selected tab, plus the live drag, with iOS-style
-        /// resistance rather than a hard stop when dragging past either end.
-        private func pageOffset(forWidth width: CGFloat) -> CGFloat {
-            let tabs = Adjustments.Tab.allCases
-            let index = CGFloat(tabs.firstIndex(of: state.selectedTab) ?? 0)
-            let lowerBound = -CGFloat(tabs.count - 1) * width
-            let offset = -index * width + dragTranslation
-
-            if offset > 0 {
-                return offset * Self.edgeResistance
-            } else if offset < lowerBound {
-                return lowerBound + (offset - lowerBound) * Self.edgeResistance
-            }
-            return offset
-        }
-
-        @ViewBuilder private func adjustmentList(for tab: Adjustments.Tab, width: CGFloat) -> some View {
+        @ViewBuilder private func adjustmentList(for tab: Adjustments.Tab) -> some View {
             List {
                 switch tab {
                 case .overrides: overrides()
                 case .tempTargets: tempTargets()
                 }
-                swipeBand(width: width)
             }
             .scrollContentBackground(.hidden)
             .background(appState.trioBackgroundColor(for: colorScheme))
-        }
-
-        /// A reserved strip at the end of each list that carries the paging gesture.
-        /// It deliberately has no `swipeActions`, so it never contends with the row
-        /// swipe actions used for editing and deleting presets.
-        private func swipeBand(width: CGFloat) -> some View {
-            Section {
-                Color.clear
-                    .frame(height: Self.swipeBandHeight)
-                    .contentShape(Rectangle())
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets())
-                    // `highPriorityGesture`, not `simultaneousGesture`: simultaneous only
-                    // guarantees this gesture isn't cancelled by the List's own scroll pan
-                    // recognizer, not that it wins the race against it — so recognition was
-                    // inconsistent, winning or losing depending on touch timing. High-priority
-                    // resolves that race in this gesture's favor. The navigation controller's
-                    // edge-swipe-to-pop recognizer is handled separately, via
-                    // `DisableInteractivePopGesture` at the top of this file.
-                    .highPriorityGesture(pageDragGesture(width: width))
-            }
-        }
-
-        private func pageDragGesture(width: CGFloat) -> some Gesture {
-            DragGesture(minimumDistance: 10)
-                // `updating` drives the offset from gesture-owned state, so SwiftUI resets it
-                // automatically when the gesture ends *or is cancelled*. The previous `@State`
-                // version only reset in `onEnded`, so a drag that the list's scroll view stole
-                // left the pager stuck at a partial offset and corrupted every later swipe.
-                .updating($dragTranslation) { value, translation, transaction in
-                    transaction.disablesAnimations = true
-                    translation = value.translation.width
-                }
-                // Also gesture-owned rather than `@State`, so that it and `dragTranslation`
-                // are reset by the same mechanism when the gesture finishes. Tying the
-                // animation gate to `onEnded` instead would assume that closure's writes land
-                // in the same render pass as the automatic reset, which is not guaranteed —
-                // and a one-frame mismatch is visible as an overshoot before the spring.
-                .updating($isDraggingPage) { _, isDragging, _ in
-                    isDragging = true
-                }
-                .onEnded { value in
-                    // A predominantly vertical drag has a near-zero width component and so
-                    // fails this threshold on its own — no axis test needed, and none of the
-                    // per-frame stutter the previous cumulative axis guard introduced.
-                    let travel = value.predictedEndTranslation.width
-                    guard abs(travel) > width * Self.pageCommitFraction else { return }
-
-                    let tabs = Adjustments.Tab.allCases
-                    let currentIndex = tabs.firstIndex(of: state.selectedTab) ?? 0
-                    let candidate = travel < 0 ? currentIndex + 1 : currentIndex - 1
-                    guard tabs.indices.contains(candidate) else { return }
-
-                    state.selectedTab = tabs[candidate]
-                }
         }
 
         @ViewBuilder func defaultText(for tab: Adjustments.Tab) -> some View {
