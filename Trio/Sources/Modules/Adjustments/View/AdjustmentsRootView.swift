@@ -2,6 +2,33 @@ import CoreData
 import SwiftUI
 import Swinject
 
+/// Disables the enclosing `UINavigationController`'s edge-swipe-to-pop gesture.
+/// Adjustments is the root of its own tab-specific `NavigationStack` with no push
+/// destinations, so the pop gesture has nothing to do — but left enabled, it still
+/// claims rightward drags before the paging gesture below sees them, which is what
+/// made swiping from Temp Targets back to Overrides fail while the reverse
+/// direction worked.
+///
+/// This assumes Adjustments never gains a `navigationDestination`/`NavigationLink` of
+/// its own — if one is ever added, its back-swipe would be silently disabled by this
+/// with no compiler warning. Remove this struct and its `.background(...)` call site
+/// below if that changes.
+private struct DisableInteractivePopGesture: UIViewControllerRepresentable {
+    func makeUIViewController(context _: Context) -> UIViewController {
+        UIViewController()
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context _: Context) {
+        DispatchQueue.main.async {
+            // `.navigationController` walks the full ancestor chain itself; going through
+            // `.parent` first would only check one level up and could miss the navigation
+            // controller if SwiftUI inserts more than one wrapper between this controller
+            // and it.
+            uiViewController.navigationController?.interactivePopGestureRecognizer?.isEnabled = false
+        }
+    }
+}
+
 extension Adjustments {
     struct RootView: BaseView {
         let resolver: Resolver
@@ -16,7 +43,8 @@ extension Adjustments {
         @State var selectedTempTargetPresetID: String?
         @State var selectedOverride: OverrideStored?
         @State var selectedTempTarget: TempTargetStored?
-        @State var isConfirmDeletePresented = false
+        @State var isConfirmOverrideDeletePresented = false
+        @State var isConfirmTempTargetDeletePresented = false
         @State var isPromptPresented = false
         @State var isRemoveAlertPresented = false
         @State var removeAlert: Alert?
@@ -51,20 +79,14 @@ extension Adjustments {
             ZStack(alignment: .center, content: {
                 VStack {
                     Picker("Adjustment Tabs", selection: $state.selectedTab) {
-                        ForEach(Adjustments.Tab.allCases.indexed(), id: \.1) { index, item in
-                            Text(item.name).tag(index)
+                        ForEach(Adjustments.Tab.allCases) { item in
+                            Text(item.name).tag(item)
                         }
                     }
                     .pickerStyle(SegmentedPickerStyle())
                     .padding(.horizontal)
 
-                    List {
-                        switch state.selectedTab {
-                        case .overrides: overrides()
-                        case .tempTargets: tempTargets() }
-                    }
-                    .scrollContentBackground(.hidden)
-                    .background(appState.trioBackgroundColor(for: colorScheme))
+                    adjustmentsPager
                 }
                 .listSectionSpacing(10)
                 .safeAreaInset(
@@ -191,11 +213,45 @@ extension Adjustments {
                         Text(activation.confirmationMessage)
                     }
                 }
-            }).background(appState.trioBackgroundColor(for: colorScheme))
+            })
+                .background(appState.trioBackgroundColor(for: colorScheme))
+                .background(DisableInteractivePopGesture())
         }
 
-        var defaultText: some View {
-            switch state.selectedTab {
+        // MARK: - Horizontal Pager
+
+        /// Native paging rather than a hand-rolled `DragGesture`. SwiftUI's gesture-priority
+        /// modifiers (`gesture` / `simultaneousGesture` / `highPriorityGesture`) arbitrate only
+        /// among SwiftUI gestures and cannot outrank the UIKit pan recognizer backing `List`,
+        /// so the previous custom drag was unreliable. A paging `TabView` is driven by UIKit's
+        /// own paging scroll view, which coordinates with the nested vertical lists natively.
+        ///
+        /// Preset rows keep their `swipeActions`, so a horizontal drag starting on a row is
+        /// claimed by that row; paging responds everywhere else — section headers, empty space,
+        /// and the running-adjustment banner.
+        private var adjustmentsPager: some View {
+            TabView(selection: $state.selectedTab) {
+                ForEach(Adjustments.Tab.allCases) { tab in
+                    adjustmentList(for: tab)
+                        .tag(tab)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+        }
+
+        @ViewBuilder private func adjustmentList(for tab: Adjustments.Tab) -> some View {
+            List {
+                switch tab {
+                case .overrides: overrides()
+                case .tempTargets: tempTargets()
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(appState.trioBackgroundColor(for: colorScheme))
+        }
+
+        @ViewBuilder func defaultText(for tab: Adjustments.Tab) -> some View {
+            switch tab {
             case .overrides:
                 Section {} header: {
                     Text("Add Preset or Override by tapping 'Add Override +' in the top right-hand corner of the screen.")
@@ -213,8 +269,8 @@ extension Adjustments {
             }
         }
 
-        var currentActiveAdjustment: some View {
-            switch state.selectedTab {
+        @ViewBuilder func currentActiveAdjustment(for tab: Adjustments.Tab) -> some View {
+            switch tab {
             case .overrides:
                 Section {
                     HStack {

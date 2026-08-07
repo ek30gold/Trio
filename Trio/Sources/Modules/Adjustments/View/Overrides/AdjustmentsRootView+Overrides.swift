@@ -5,7 +5,7 @@ extension Adjustments.RootView {
     @ViewBuilder func overrides() -> some View {
         Group {
             if state.isOverrideEnabled, state.activeOverrideName.isNotEmpty {
-                currentActiveAdjustment
+                currentActiveAdjustment(for: .overrides)
             }
             if !state.scheduledOverrides.isEmpty {
                 scheduledOverrideBanner
@@ -14,7 +14,7 @@ extension Adjustments.RootView {
             if state.overridePresets.isNotEmpty {
                 overridePresets
             } else {
-                defaultText
+                defaultText(for: .overrides)
             }
         }
     }
@@ -35,7 +35,7 @@ extension Adjustments.RootView {
             .onMove(perform: state.reorderOverride)
             .confirmationDialog(
                 "Delete the Override Preset \"\(selectedOverride?.name ?? "")\"?",
-                isPresented: $isConfirmDeletePresented,
+                isPresented: $isConfirmOverrideDeletePresented,
                 titleVisibility: .visible
             ) {
                 if let itemToDelete = selectedOverride {
@@ -96,7 +96,7 @@ extension Adjustments.RootView {
         Group {
             Button(role: .destructive) {
                 selectedOverride = preset
-                isConfirmDeletePresented = true
+                isConfirmOverrideDeletePresented = true
             } label: {
                 Label("Delete", systemImage: "trash.fill")
                     .tint(.red)

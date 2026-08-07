@@ -4,7 +4,7 @@ import SwiftUI
 extension Adjustments.RootView {
     @ViewBuilder func tempTargets() -> some View {
         if state.isTempTargetEnabled, state.activeTempTargetName.isNotEmpty {
-            currentActiveAdjustment
+            currentActiveAdjustment(for: .tempTargets)
         }
         if state.scheduledTempTargets.isNotEmpty {
             scheduledTempTargetBanner
@@ -13,7 +13,7 @@ extension Adjustments.RootView {
         if state.tempTargetPresets.isNotEmpty {
             tempTargetPresets
         } else {
-            defaultText
+            defaultText(for: .tempTargets)
         }
     }
 
@@ -89,7 +89,7 @@ extension Adjustments.RootView {
             .onMove(perform: state.reorderTempTargets)
             .confirmationDialog(
                 deleteConfirmationTitle,
-                isPresented: $isConfirmDeletePresented,
+                isPresented: $isConfirmTempTargetDeletePresented,
                 titleVisibility: .visible
             ) {
                 deleteConfirmationButtons()
@@ -122,7 +122,7 @@ extension Adjustments.RootView {
             Button(role: .destructive) {
                 Task {
                     selectedTempTarget = tempTarget
-                    isConfirmDeletePresented = true
+                    isConfirmTempTargetDeletePresented = true
                 }
             } label: {
                 Label("Delete", systemImage: "trash.fill")
