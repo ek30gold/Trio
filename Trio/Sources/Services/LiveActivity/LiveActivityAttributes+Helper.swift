@@ -70,6 +70,7 @@ extension LiveActivityAttributes.ContentState {
         iob: Decimal?,
         override: OverrideData?,
         tempTarget: TempTargetData?,
+        basal: BasalData?,
         widgetItems: [LiveActivityAttributes.LiveActivityItem]?
     ) {
         let glucose = bg.glucose
@@ -118,6 +119,9 @@ extension LiveActivityAttributes.ContentState {
             tempTargetDate: tempTarget?.date ?? Date(),
             tempTargetDuration: tempTarget?.duration ?? 0,
             tempTargetTarget: tempTarget?.target ?? 0,
+            basalRate: basal?.rate, // stays nil when unknown; do not default to 0, that would read as "no insulin"
+            isTempBasalActive: basal?.isTempBasalActive ?? false,
+            isInsulinSuspended: basal?.isInsulinSuspended ?? false,
             widgetItems: widgetItems ?? [] // set empty array here to silence compiler; this can never be nil
         )
 

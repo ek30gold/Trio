@@ -38,6 +38,8 @@ final class LiveActivityData: ObservableObject {
     @Published var override: OverrideData?
     /// The current temp target data (if any).
     @Published var tempTarget: TempTargetData?
+    /// The basal rate currently being delivered (if known).
+    @Published var basal: BasalData?
     /// The widget items displayed within the live activity.
     @Published var widgetItems: [LiveActivityAttributes.LiveActivityItem]?
 }
@@ -56,6 +58,7 @@ final class LiveActivityData: ObservableObject {
     @Injected() private var storage: FileStorage!
     @Injected() private var glucoseStorage: GlucoseStorage!
     @Injected() private var iobService: IOBService!
+    @Injected() private var apsManager: APSManager!
 
     private let activityAuthorizationInfo = ActivityAuthorizationInfo()
     /// Indicates whether system live activities are enabled.
@@ -157,6 +160,12 @@ final class LiveActivityData: ObservableObject {
                 Task { await self?.loadDetermination() }
             }.store(in: &subscriptions)
 
+        coreDataPublisher?.filteredByEntityName("PumpEventStored")
+            .debounce(for: .seconds(2), scheduler: DispatchQueue.global(qos: .utility))
+            .sink { [weak self] _ in
+                Task { await self?.loadBasal() }
+            }.store(in: &subscriptions)
+
         iobService.iobPublisher
             .debounce(for: .seconds(2), scheduler: DispatchQueue.global(qos: .utility))
             .sink { [weak self] _ in
@@ -194,6 +203,50 @@ final class LiveActivityData: ObservableObject {
         }
     }
 
+    /// Fetches the basal rate currently being delivered and updates the live activity content state.
+    ///
+    /// A running temp basal takes precedence; when none is running, this falls back to the rate the
+    /// scheduled basal profile defines for the current time of day, mirroring `HomeRootView.basalString`.
+    /// `rate` stays `nil` when neither source can answer, so the widget can render an explicit
+    /// "unknown" rather than a misleading number.
+    private func loadBasal() async {
+        do {
+            let activeTempBasal = try await fetchAndMapBasal()
+
+            let rate: Decimal?
+            if let activeTempBasal {
+                // A temp basal is running: it, and only it, describes what is being delivered.
+                rate = activeTempBasal.rate
+            } else {
+                rate = await scheduledBasalRate(at: Date())
+            }
+
+            data.basal = BasalData(
+                rate: rate,
+                isTempBasalActive: activeTempBasal != nil,
+                isInsulinSuspended: apsManager.isSuspended
+            )
+        } catch {
+            debug(.default, "[LiveActivityManager] \(DebuggingIdentifiers.failed) failed to fetch and map basal: \(error)")
+        }
+    }
+
+    /// Returns the scheduled basal rate for the given time, based on the stored basal profile.
+    ///
+    /// Mirrors `HomeProvider.getBasalProfile()` and `HomeRootView.scheduledBasalDeliveryRate(at:)`.
+    private func scheduledBasalRate(at when: Date) async -> Decimal? {
+        let basalProfile = await storage.retrieveAsync(OpenAPS.Settings.basalProfile, as: [BasalProfileEntry].self)
+            ?? [BasalProfileEntry](from: OpenAPS.defaults(for: OpenAPS.Settings.basalProfile))
+            ?? []
+
+        let calendar = Calendar(identifier: .gregorian)
+        let hours = calendar.component(.hour, from: when)
+        let minutes = calendar.component(.minute, from: when)
+        let totalMinutes = hours * 60 + minutes
+
+        return findBasalRateForOffset(for: totalMinutes, in: basalProfile)
+    }
+
     /// Handles changes to the live activity order.
     ///
     /// Loads widget items from user defaults and triggers an update to the live activity order.
@@ -220,6 +273,7 @@ final class LiveActivityData: ObservableObject {
             await self.loadOverrides()
             await self.loadTempTarget()
             await self.loadDetermination()
+            await self.loadBasal()
             self.loadWidgetItems()
         }
     }
@@ -322,6 +376,9 @@ final class LiveActivityData: ObservableObject {
                                 tempTargetDate: Date.now,
                                 tempTargetDuration: 0,
                                 tempTargetTarget: 0,
+                                basalRate: nil,
+                                isTempBasalActive: false,
+                                isInsulinSuspended: false,
                                 widgetItems: []
                             ),
                             isInitialState: true
@@ -421,6 +478,7 @@ final class LiveActivityData: ObservableObject {
             iob: data.iob,
             override: data.override,
             tempTarget: data.tempTarget,
+            basal: data.basal,
             widgetItems: data.widgetItems
         )
 

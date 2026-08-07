@@ -68,6 +68,49 @@ extension LiveActivityManager {
         }
     }
 
+    /// The temp basal that is currently being delivered, as far as pump history can tell.
+    ///
+    /// This is deliberately not a `BasalData`: pump history can only answer half of the question.
+    /// The scheduled-profile fallback and the pump suspension state are layered on by
+    /// `LiveActivityManager.loadBasal()`, which can await file storage and read `APSManager`.
+    struct ActiveTempBasal {
+        /// The temp basal's rate, or `nil` if the stored event carries no rate.
+        let rate: Decimal?
+    }
+
+    /// Fetches the temp basal that is currently running, if any.
+    ///
+    /// - Returns: `nil` when no temp basal is running right now, in which case the caller is expected
+    /// to fall back to the scheduled basal profile. A non-`nil` result means a temp basal *is* running.
+    func fetchAndMapBasal() async throws -> ActiveTempBasal? {
+        let results = try await CoreDataStack.shared.fetchEntitiesAsync(
+            ofType: PumpEventStored.self,
+            onContext: context,
+            predicate: NSPredicate.pumpHistoryLast24h,
+            key: "timestamp",
+            ascending: false,
+            relationshipKeyPathsForPrefetching: ["tempBasal"]
+        )
+
+        return try await context.perform {
+            guard let pumpEvents = results as? [PumpEventStored] else {
+                throw CoreDataError.fetchError(function: #function, file: #file)
+            }
+
+            // Events are sorted newest first, so the first one carrying a temp basal is the most
+            // recent temp basal. It only reflects what is being delivered if it has not yet elapsed.
+            guard let latestTempBasalEvent = pumpEvents.first(where: { $0.tempBasal != nil }),
+                  let tempBasal = latestTempBasalEvent.tempBasal,
+                  let timestamp = latestTempBasalEvent.timestamp,
+                  timestamp + tempBasal.duration.minutes > Date()
+            else {
+                return nil
+            }
+
+            return ActiveTempBasal(rate: tempBasal.rate?.decimalValue)
+        }
+    }
+
     func fetchAndMapTempTarget() async throws -> TempTargetData? {
         try await fetchAndMapLatest(
             ofType: TempTargetStored.self,

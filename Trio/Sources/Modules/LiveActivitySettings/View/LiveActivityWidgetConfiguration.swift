@@ -211,6 +211,8 @@ struct LiveActivityWidgetConfiguration: BaseView {
             return AnyView(updatedLabelPreview)
         case .totalDailyDose:
             return AnyView(totalDailyDosePreview)
+        case .basalRate:
+            return AnyView(basalRatePreview)
         }
     }
 
@@ -319,6 +321,19 @@ struct LiveActivityWidgetConfiguration: BaseView {
         }
     }
 
+    private var basalRatePreview: some View {
+        VStack {
+            Text("0.85 U/hr")
+                .fontWeight(.bold)
+                .font(.caption)
+                .minimumScaleFactor(0.7)
+                .lineLimit(1)
+                .foregroundStyle(.primary)
+
+            Text("Basal").font(.caption2).foregroundStyle(.primary)
+        }
+    }
+
     private func loadOrder() {
         if let savedItems = UserDefaults.standard.loadLiveActivityOrder() {
             selectedItems = savedItems.count == 4 ? savedItems : savedItems + Array(repeating: nil, count: 4 - savedItems.count)
@@ -373,6 +388,7 @@ enum LiveActivityItem: String, CaseIterable, Identifiable {
     case cob
     case updatedLabel
     case totalDailyDose
+    case basalRate
 
     var id: String { rawValue }
 
@@ -403,6 +419,11 @@ enum LiveActivityItem: String, CaseIterable, Identifiable {
             return String(localized: "Last Updated", comment: "Live Activity widget icon label for Last Updated")
         case .totalDailyDose:
             return String(localized: "Total Daily Dose", comment: "Live Activity widget icon label for Total Daily Dose")
+        case .basalRate:
+            return String(
+                localized: "Basal Rate",
+                comment: "Live Activity widget icon label for Basal Rate"
+            )
         }
     }
 }

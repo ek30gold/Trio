@@ -9,6 +9,7 @@ struct LiveActivityAttributes: ActivityAttributes {
         case cob
         case updatedLabel
         case totalDailyDose
+        case basalRate
         case empty
 
         static let defaultItems: [Self] = [.currentGlucoseLarge, .iob, .cob, .updatedLabel]
@@ -48,6 +49,9 @@ struct LiveActivityAttributes: ActivityAttributes {
         let tempTargetDate: Date
         let tempTargetDuration: Decimal
         let tempTargetTarget: Decimal
+        let basalRate: Decimal?
+        let isTempBasalActive: Bool
+        let isInsulinSuspended: Bool
         let widgetItems: [LiveActivityItem]
     }
 
