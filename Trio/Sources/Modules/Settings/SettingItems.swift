@@ -292,7 +292,10 @@ enum SettingItems {
                 "Time in Tight Range (TITR)",
                 "Time in Normoglycemia (TING)",
                 "X-Axis Interval Step",
-                "Require Adjustments Confirmation"
+                "Require Adjustments Confirmation",
+                "Home Screen Design",
+                "Classic",
+                "Modern"
             ],
             scrollTargetLabels: [
                 "Show Y-Axis Grid Lines": "Show X-Axis Grid Lines",
@@ -306,7 +309,10 @@ enum SettingItems {
                 "Dark Scheme": "Appearance",
                 "Light Scheme": "Appearance",
                 "X-Axis Interval Step": "Show X-Axis Grid Lines",
-                "Carbs Required Threshold": "Show Carbs Required Badge"
+                "Carbs Required Threshold": "Show Carbs Required Badge",
+                "Home Screen Design": "Appearance",
+                "Classic": "Appearance",
+                "Modern": "Appearance"
             ],
             path: ["Features", "User Interface"]
         ),

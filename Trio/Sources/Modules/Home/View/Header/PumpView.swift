@@ -11,7 +11,7 @@ struct PumpView: View {
     let battery: [OpenAPS_Battery]
     @Environment(\.colorScheme) var colorScheme
 
-    let NORMAL_PATCH_AGE = TimeInterval.hours(80)
+    let NORMAL_PATCH_AGE = PumpDisplayFormatting.normalPatchAge
 
     private var batteryFormatter: NumberFormatter {
         let formatter = NumberFormatter()
@@ -20,21 +20,11 @@ struct PumpView: View {
     }
 
     private var hourglassIcon: String {
-        if activatedAtDate != nil { return "hourglass.badge.plus" }
-        guard let expiration = expiresAtDate else { return "hourglass" }
-
-        let hoursRemaining = expiration.timeIntervalSince(timerDate) / 3600
-
-        switch hoursRemaining {
-        case 60 ... 72:
-            return "hourglass.bottomhalf.filled"
-        case 12 ..< 60:
-            return "hourglass"
-        case -8 ..< 12:
-            return "hourglass.tophalf.filled"
-        default:
-            return "hourglass"
-        }
+        PumpDisplayFormatting.hourglassIcon(
+            expiresAtDate: expiresAtDate,
+            activatedAtDate: activatedAtDate,
+            timerDate: timerDate
+        )
     }
 
     var body: some View {
@@ -133,6 +123,59 @@ struct PumpView: View {
     }
 
     private func remainingTimeString(time: TimeInterval) -> String {
+        PumpDisplayFormatting.remainingTimeString(time: time)
+    }
+
+    private var batteryColor: Color {
+        PumpDisplayFormatting.batteryColor(percent: battery.first?.percent)
+    }
+
+    private var reservoirColor: Color {
+        PumpDisplayFormatting.reservoirColor(for: reservoir)
+    }
+
+    private var timerColor: Color {
+        PumpDisplayFormatting.timerColor(
+            expiresAtDate: expiresAtDate,
+            activatedAtDate: activatedAtDate,
+            timerDate: timerDate
+        )
+    }
+
+    private var timerColorSecondary: Color {
+        PumpDisplayFormatting.timerColorSecondary(activatedAtDate: activatedAtDate)
+    }
+}
+
+// MARK: - Shared pump display formatting
+
+/// Icon, colour and duration formatting for pump status readouts.
+///
+/// Extracted from `PumpView` so the Classic and Modern home layouts render pump state identically —
+/// a threshold changed here changes both, rather than the two drifting apart.
+enum PumpDisplayFormatting {
+    /// Age at which a pod with a known activation date is considered old enough to warn about.
+    static let normalPatchAge = TimeInterval.hours(80)
+
+    static func hourglassIcon(expiresAtDate: Date?, activatedAtDate: Date?, timerDate: Date) -> String {
+        if activatedAtDate != nil { return "hourglass.badge.plus" }
+        guard let expiration = expiresAtDate else { return "hourglass" }
+
+        let hoursRemaining = expiration.timeIntervalSince(timerDate) / 3600
+
+        switch hoursRemaining {
+        case 60 ... 72:
+            return "hourglass.bottomhalf.filled"
+        case 12 ..< 60:
+            return "hourglass"
+        case -8 ..< 12:
+            return "hourglass.tophalf.filled"
+        default:
+            return "hourglass"
+        }
+    }
+
+    static func remainingTimeString(time: TimeInterval) -> String {
         guard time > 0 else {
             return String(localized: "Replace pod", comment: "View/Header when pod expired")
         }
@@ -161,12 +204,12 @@ struct PumpView: View {
         return "\(minutes)" + String(localized: "m", comment: "abbreviation for minutes")
     }
 
-    private var batteryColor: Color {
-        guard let battery = battery.first else {
+    static func batteryColor(percent: Double?) -> Color {
+        guard let percent = percent else {
             return .gray
         }
 
-        switch battery.percent {
+        switch percent {
         case ...10:
             return Color.loopRed
         case ...20:
@@ -176,7 +219,7 @@ struct PumpView: View {
         }
     }
 
-    private var reservoirColor: Color {
+    static func reservoirColor(for reservoir: Decimal?) -> Color {
         guard let reservoir = reservoir else {
             return .gray
         }
@@ -191,9 +234,13 @@ struct PumpView: View {
         }
     }
 
-    private var timerColor: Color {
+    static func timerColor(
+        expiresAtDate: Date?,
+        activatedAtDate: Date?,
+        timerDate: Date
+    ) -> Color {
         if let activatedAt = activatedAtDate {
-            return abs(activatedAt.timeIntervalSinceNow) > NORMAL_PATCH_AGE ? Color.yellow : Color.loopGreen
+            return abs(activatedAt.timeIntervalSinceNow) > normalPatchAge ? Color.yellow : Color.loopGreen
         }
 
         guard let expiresAt = expiresAtDate else {
@@ -212,7 +259,7 @@ struct PumpView: View {
         }
     }
 
-    private var timerColorSecondary: Color {
+    static func timerColorSecondary(activatedAtDate: Date?) -> Color {
         if activatedAtDate != nil {
             return Color.gray
         }

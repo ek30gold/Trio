@@ -70,6 +70,8 @@
 		3811DE3125C9D49500A708ED /* HomeProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE2925C9D49500A708ED /* HomeProvider.swift */; };
 		3811DE3225C9D49500A708ED /* HomeDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE2A25C9D49500A708ED /* HomeDataFlow.swift */; };
 		3811DE3525C9D49500A708ED /* HomeRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE2E25C9D49500A708ED /* HomeRootView.swift */; };
+		16D6DA4AB6414267843A725A /* HomeRootView+Modern.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D8183128D008D098C665DD0 /* HomeRootView+Modern.swift */; };
+		3E2BE41886B15B569605B0DF /* ModernHomeComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 863E1ED64C2CAEB16338967C /* ModernHomeComponents.swift */; };
 		3811DE3F25C9D4A100A708ED /* SettingsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE3925C9D4A100A708ED /* SettingsStateModel.swift */; };
 		3811DE4125C9D4A100A708ED /* SettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE3C25C9D4A100A708ED /* SettingsRootView.swift */; };
 		3811DE4225C9D4A100A708ED /* SettingsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE3D25C9D4A100A708ED /* SettingsDataFlow.swift */; };
@@ -617,6 +619,7 @@
 		DD6A4E842DBEDD39008C4B26 /* AlgorithmSettingsImportantNotesStepView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD6A4E832DBEDD39008C4B26 /* AlgorithmSettingsImportantNotesStepView.swift */; };
 		DD6B7CB22C7B6F0800B75029 /* Rounding.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD6B7CB12C7B6F0800B75029 /* Rounding.swift */; };
 		DD6B7CB42C7B71F700B75029 /* ForecastDisplayType.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD6B7CB32C7B71F700B75029 /* ForecastDisplayType.swift */; };
+		4CB7BE33808D3AA9FBA0BC5C /* HomeLayoutStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB40B68DA6EDC136E8900318 /* HomeLayoutStyle.swift */; };
 		DD6D67E42C9C253500660C9B /* ColorSchemeOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD6D67E32C9C253500660C9B /* ColorSchemeOption.swift */; };
 		DD6F63CC2D27F615007D94CF /* TreatmentMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD6F63CB2D27F606007D94CF /* TreatmentMenuView.swift */; };
 		DD73FA0F2D74F58E00D19D1E /* BackgroundTask+Helper.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD73FA0E2D74F57300D19D1E /* BackgroundTask+Helper.swift */; };
@@ -949,6 +952,8 @@
 		3811DE2925C9D49500A708ED /* HomeProvider.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HomeProvider.swift; sourceTree = "<group>"; };
 		3811DE2A25C9D49500A708ED /* HomeDataFlow.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HomeDataFlow.swift; sourceTree = "<group>"; };
 		3811DE2E25C9D49500A708ED /* HomeRootView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HomeRootView.swift; sourceTree = "<group>"; };
+		8D8183128D008D098C665DD0 /* HomeRootView+Modern.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeRootView+Modern.swift"; sourceTree = "<group>"; };
+		863E1ED64C2CAEB16338967C /* ModernHomeComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModernHomeComponents.swift; sourceTree = "<group>"; };
 		3811DE3925C9D4A100A708ED /* SettingsStateModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SettingsStateModel.swift; sourceTree = "<group>"; };
 		3811DE3C25C9D4A100A708ED /* SettingsRootView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SettingsRootView.swift; sourceTree = "<group>"; };
 		3811DE3D25C9D4A100A708ED /* SettingsDataFlow.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SettingsDataFlow.swift; sourceTree = "<group>"; };
@@ -1488,6 +1493,7 @@
 		DD6A4E832DBEDD39008C4B26 /* AlgorithmSettingsImportantNotesStepView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlgorithmSettingsImportantNotesStepView.swift; sourceTree = "<group>"; };
 		DD6B7CB12C7B6F0800B75029 /* Rounding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rounding.swift; sourceTree = "<group>"; };
 		DD6B7CB32C7B71F700B75029 /* ForecastDisplayType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForecastDisplayType.swift; sourceTree = "<group>"; };
+		EB40B68DA6EDC136E8900318 /* HomeLayoutStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeLayoutStyle.swift; sourceTree = "<group>"; };
 		DD6D67E32C9C253500660C9B /* ColorSchemeOption.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorSchemeOption.swift; sourceTree = "<group>"; };
 		DD6F63CB2D27F606007D94CF /* TreatmentMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TreatmentMenuView.swift; sourceTree = "<group>"; };
 		DD73FA0E2D74F57300D19D1E /* BackgroundTask+Helper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BackgroundTask+Helper.swift"; sourceTree = "<group>"; };
@@ -2104,6 +2110,8 @@
 			isa = PBXGroup;
 			children = (
 				3811DE2E25C9D49500A708ED /* HomeRootView.swift */,
+				8D8183128D008D098C665DD0 /* HomeRootView+Modern.swift */,
+				863E1ED64C2CAEB16338967C /* ModernHomeComponents.swift */,
 				3833B51E260264AC003021B3 /* Chart */,
 				3833B51F260264B6003021B3 /* Header */,
 			);
@@ -2512,6 +2520,7 @@
 				DD4FFF322D458EE600B6CFF9 /* GarminWatchState.swift */,
 				DD940BA92CA7585D000830A5 /* GlucoseColorScheme.swift */,
 				715120D12D3C2B84005D9FB6 /* GlucoseNotificationsOption.swift */,
+				EB40B68DA6EDC136E8900318 /* HomeLayoutStyle.swift */,
 				E0D4F80427513ECF00BDF1FE /* HealthKitSample.swift */,
 				1967DFBD29D052C200759F30 /* Icons.swift */,
 				382C133625F13A1E00715CE1 /* InsulinSensitivities.swift */,
@@ -4565,6 +4574,8 @@
 				3871F39F25ED895A0013ECB5 /* Decimal+Extensions.swift in Sources */,
 				CEE9A6592BBB418300EB5194 /* CalibrationsDataFlow.swift in Sources */,
 				3811DE3525C9D49500A708ED /* HomeRootView.swift in Sources */,
+				16D6DA4AB6414267843A725A /* HomeRootView+Modern.swift in Sources */,
+				3E2BE41886B15B569605B0DF /* ModernHomeComponents.swift in Sources */,
 				38E98A2925F52C9300C0CED0 /* Error+Extensions.swift in Sources */,
 				3E62C7822F54CC1B00433237 /* BolusDisplayThreshold.swift in Sources */,
 				38EA05DA261F6E7C0064E39B /* SimpleLogReporter.swift in Sources */,
@@ -4787,6 +4798,7 @@
 				CE7CA3542A064973004BE681 /* TempPresetsIntentRequest.swift in Sources */,
 				58A3D5442C96DE11003F90FC /* TempTargetStored+Helper.swift in Sources */,
 				DD6B7CB42C7B71F700B75029 /* ForecastDisplayType.swift in Sources */,
+				4CB7BE33808D3AA9FBA0BC5C /* HomeLayoutStyle.swift in Sources */,
 				BD47FD172D88AAF50043966B /* CompletedStepView.swift in Sources */,
 				DD4AFFF12DADB59100AB7387 /* AlgorithmSettingsContentsStepView.swift in Sources */,
 				DDEBB05C2D89E9050032305D /* TimeInRangeType.swift in Sources */,
