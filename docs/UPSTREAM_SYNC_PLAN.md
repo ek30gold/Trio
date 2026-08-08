@@ -137,7 +137,84 @@ churn is only +225/−24 and mostly additive, so this stays tractable.
 
 ---
 
-## 4. Phase 0 — Decide the base (blocking)
+## 3a. Verification without a Mac
+
+There is no Mac in this workflow — builds are done via GitHub Actions ("browser
+build") and delivered through TestFlight. Everything below is therefore designed
+around CI as the compile/test surface.
+
+**What already works:** `build_trio.yml` runs on `workflow_dispatch` against
+whatever branch it is dispatched on (`TARGET_BRANCH: ${{ github.ref_name }}`), and
+has been used successfully on at least 8 feature branches. That is the path to a
+real on-device build of any branch.
+
+**What was broken:** `unit_tests.yml` is hard-gated with
+`if: github.repository_owner == 'nightscout'` and only triggers on a `dev` branch
+this fork does not have. It has therefore **never run here** — the fork had no
+automated compile or test gate at all.
+
+**Fix:** `.github/workflows/fork_ci.yml` (fork-owned, new file — deliberately not
+a patch to `unit_tests.yml`, so it never conflicts during the upstream re-port).
+Runs `build-for-testing` + `test-without-building` on `main`, `claude/**`,
+`feature/**`, `fix/**`, `refactor/**`, `spike/**`, on PRs into `main`, and on
+manual dispatch. This is the substitute for "build it locally in Xcode".
+
+**Revised gate model for every phase below:**
+
+| Old (Mac) | New (no Mac) |
+|---|---|
+| `xcodebuild` locally | Fork CI green on the branch |
+| Run in simulator | — (not available; rely on tests) |
+| Run on device | `build_trio.yml` dispatch → TestFlight install |
+
+Practical consequence: **CI green is cheap, a device build is expensive** (~30–60
+min of macOS runner + a TestFlight round trip). So each re-ported feature should
+be pushed until Fork CI is green *first*, and only then spent on a TestFlight
+build. Batch device verification where features are independent.
+
+### ⚠️ Scheduled sync — decide-by-default hazard
+
+`build_trio.yml` contains a **"Sync upstream changes"** step
+(`aormsby/Fork-Sync-With-Upstream-action`) that syncs `TARGET_BRANCH` from
+`nightscout/Trio` of the *same branch name*, whenever `vars.SCHEDULED_SYNC` is not
+`'false'`. Its weekly `cron` fires on the default branch — `main`.
+
+This is live, not theoretical: scheduled runs on `main` completed on 2026-07-12,
+07-19, 07-26 and 08-02, and this fork's history already contains three
+`Merge branch 'main' of https://github.com/nightscout/Trio` commits from it. That
+auto-sync is *why* this fork tracks the release track.
+
+**Implication:** when upstream cuts **v0.8.5 to `main`, the next Sunday cron will
+try to merge it into this fork's `main` unattended — and if the merge succeeds,
+build it straight to TestFlight.** Against 28 colliding files, the likely outcome
+is a failed merge (loud, safe); the dangerous outcome is a clean-but-semantically-
+wrong auto-merge that ships to the phone.
+
+**Action (repo settings, cannot be done from code):**
+Settings → Secrets and variables → Actions → Variables →
+set `SCHEDULED_SYNC = false` (and optionally `SCHEDULED_BUILD = false`).
+Manual `workflow_dispatch` builds are unaffected.
+
+---
+
+## 4. Phase 0 — Decide the base (deferred by design)
+
+**Decision is deliberately deferred.** Rather than picking a base up front, run
+Phase 1 and let the evidence choose. Re-evaluate once the Phase 1 gate is filled
+in — but note that deferring only stays safe once `SCHEDULED_SYNC` is off (above),
+otherwise the Sunday cron makes the decision unattended.
+
+### Decision criteria — pick based on what Phase 1 shows
+
+| Evidence from Phase 1 | Points to |
+|---|---|
+| Upstream `dev` CI green **and** stable on device for ~1 week | A — port onto `dev` now |
+| `dev` builds but shows dosing/loop oddities, or CI red | B — wait for v0.8.5 |
+| Upstream home refactor covers what Modern layout was for | Drop `feature/modern-home-layout`, shrinking the port |
+| Modern layout still clearly better for daily use | Keep it; budget the re-port against `dashboardContent` |
+| v0.8.5 released before the spike finishes | B, automatically — retarget spike at the release tag |
+
+### The options themselves
 
 Upstream has **no v0.8.5 release yet**; `main` is still v0.8.4.
 
@@ -148,9 +225,8 @@ Upstream has **no v0.8.5 release yet**; `main` is still v0.8.4.
   against code that passed upstream release testing. **Recommended.**
 - **Option C — stay on v0.8.4.** Cheapest now, worst later.
 
-Recommendation: **B**, but run the Phase 1 spike now — it is throwaway-cheap and
-informative — and use the waiting time to judge whether upstream's home refactor
-makes our Modern layout redundant.
+Prior recommendation was **B**. That now resolves through the criteria table
+above rather than being chosen up front — run Phase 1 first and let it decide.
 
 ---
 
@@ -250,25 +326,32 @@ ones, `AccuChekKit` (`940d19dc`) and `EversenseKit` (`b46c45cc`), and the freshl
 bumped `OmnipodKit` (`e31a8d1c`). No dangling pins; `git submodule update --init
 --recursive` should not stall on a bad reference.
 
-### To do — Mac with Xcode (Phase 1 steps 3–5)
+### To do — via GitHub Actions (Phase 1 steps 3–5, no Mac needed)
+
+`spike/upstream-base` is pure `upstream/dev`, which carries only upstream's
+nightscout-gated `unit_tests.yml` — so CI would not run on it as-is. To make the
+spike testable, the branch must be pushed with the single `fork_ci.yml` commit
+cherry-picked on top:
 
 ```bash
-git fetch upstream
 git checkout spike/upstream-base
-git submodule update --init --recursive
-
-xed .   # opens Trio.xcworkspace
-
-xcodebuild build-for-testing -workspace Trio.xcworkspace -scheme "Trio Tests" \
-  -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
-
-xcodebuild test-without-building -workspace Trio.xcworkspace -scheme "Trio Tests" \
-  -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
+git cherry-pick <fork_ci.yml commit>
+git push -u origin spike/upstream-base
 ```
+
+Then, in the GitHub web UI:
+
+1. **Actions → "Fork CI: build & unit tests"** → confirm it ran green on
+   `spike/upstream-base`. This is the compile + unit-test gate.
+2. **Actions → "4. Build Trio" → Run workflow → branch `spike/upstream-base`.**
+   Produces a TestFlight build of stock upstream `dev`.
+3. Install from TestFlight and run it on the real pump + CGM.
 
 Record the result of the gate here before moving to Phase 2:
 
-- [ ] upstream `dev` builds clean
+- [ ] Fork CI green on `spike/upstream-base`
 - [ ] test suite green (record failures if any)
+- [ ] TestFlight build succeeded
 - [ ] runs on device with real pump + CGM
 - [ ] lived with stock home refactor — Modern layout verdict: _(keep / drop / partial)_
+- [ ] `SCHEDULED_SYNC` set to `false` in repo variables

@@ -1,0 +1,126 @@
+# Fork-owned CI: compile + unit tests without a local Mac.
+#
+# Why this file exists separately from unit_tests.yml:
+#   Upstream's unit_tests.yml is hard-gated with
+#     if: github.repository_owner == 'nightscout'
+#   and only triggers on the `dev` branch, which this fork does not have. On this
+#   fork it therefore never runs, leaving no automated compile or test gate.
+#
+#   Rather than patch that file (which would conflict on every upstream sync),
+#   this is a separate fork-owned workflow. Upstream never touches it, so it
+#   survives the upstream re-port cleanly.
+#
+# This is the substitute for "build it locally in Xcode" — it is the gate that
+# a feature branch must pass before it is worth spending a TestFlight build on.
+
+name: "Fork CI: build & unit tests"
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - main
+      - 'claude/**'
+      - 'feature/**'
+      - 'fix/**'
+      - 'refactor/**'
+      - 'spike/**'
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+
+# A newer push to the same branch supersedes an in-flight run. macOS runners are
+# slow; without this, rapid pushes queue up and waste 30+ minutes each.
+concurrency:
+  group: fork-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build & test
+    runs-on: macos-26
+    # Fork-only. No-ops if this file ever lands upstream.
+    if: github.repository_owner != 'nightscout'
+
+    steps:
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          submodules: recursive
+
+      - name: Restore cache
+        id: cache-restore
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            /Users/runner/Library/Developer/Xcode/DerivedData
+            .build
+          key: ${{ runner.os }}-trio-${{ hashFiles('**/*.swift', '**/*.xcodeproj', '**/*.xcworkspace') }}
+          restore-keys: |
+            ${{ runner.os }}-trio-
+
+      - name: Build for testing
+        run: |
+          set -o pipefail && \
+          time xcodebuild build-for-testing \
+            -workspace Trio.xcworkspace \
+            -scheme "Trio Tests" \
+            -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
+
+      - name: Save cache
+        if: steps.cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            /Users/runner/Library/Developer/Xcode/DerivedData
+            .build
+          key: ${{ runner.os }}-trio-${{ hashFiles('**/*.swift', '**/*.xcodeproj', '**/*.xcworkspace') }}
+
+      - name: Run tests
+        run: |
+          set -o pipefail
+          time xcodebuild test-without-building \
+            -workspace Trio.xcworkspace \
+            -scheme "Trio Tests" \
+            -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2' \
+            2>&1 | tee xcodebuild.log
+
+      - name: Annotate test results
+        if: always()
+        run: |
+          if [ -f xcodebuild.log ]; then
+            if grep -q "Failing tests:" xcodebuild.log; then
+              echo "::error title=Unit Tests Failed::Some tests failed"
+              echo "## ❌ Some tests failed:" >> $GITHUB_STEP_SUMMARY
+              grep -A 20 "Failing tests:" xcodebuild.log | \
+                grep -E '^\s+[A-Za-z0-9]+\..+\(\)' | \
+                sed 's/^/  - /' >> $GITHUB_STEP_SUMMARY
+            else
+              echo "::notice title=Unit Tests Passed::✅ All tests passed"
+              echo "✅ All tests passed" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "::warning::Test log (xcodebuild.log) not found"
+          fi
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log-${{ github.run_id }}
+          path: xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 14
