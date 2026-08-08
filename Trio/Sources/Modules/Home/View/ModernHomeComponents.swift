@@ -89,10 +89,17 @@ struct ModernStatChip<Value: View>: View {
                     .fontWeight(.bold)
                     .fontDesign(.rounded)
                     .lineLimit(1)
+                    // Tighten letter spacing before falling back to scaling the glyphs down, so the
+                    // longest readout (the basal rate) stays at full size in its share of the row.
+                    .allowsTightening(true)
                     .minimumScaleFactor(0.7)
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 8)
+            // Every chip claims the full width offered to it, so an HStack of chips at equal layout
+            // priority splits the row evenly. Do not give one chip a higher `layoutPriority`: the
+            // stack offers the top-priority child all remaining width first, and because of this
+            // modifier it takes every point, collapsing its siblings to an ellipsis.
             .frame(maxWidth: .infinity)
         }
     }

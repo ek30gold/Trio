@@ -261,20 +261,24 @@ extension Home.RootView {
                 state.runLoop()
             }
 
-            HStack(spacing: 4) {
+            // `LoopView` draws its capsule from `.callout` text plus 5/10 padding and a 2pt stroke.
+            // This pill repeats that recipe exactly — same font, padding and stroke — so the two
+            // capsules resolve to the same height instead of the eventual-BG one sitting short, and
+            // they keep matching as Dynamic Type scales both fonts together.
+            HStack(alignment: .center, spacing: 4) {
                 Image(systemName: "arrow.right.circle")
-                    .font(.caption)
+                    .font(.callout)
                     .fontWeight(.bold)
 
                 if let eventualBG = state.enactedAndNonEnactedDeterminations.first?.eventualBG {
                     let eventualGlucose = eventualBG as Decimal
                     Text(state.units == .mgdL ? eventualGlucose.description : eventualGlucose.formattedAsMmolL)
-                        .font(.caption)
+                        .font(.callout)
                         .fontWeight(.bold)
                         .fontDesign(.rounded)
                 } else {
                     Text("--")
-                        .font(.caption)
+                        .font(.callout)
                         .fontWeight(.bold)
                         .fontDesign(.rounded)
                 }
@@ -398,11 +402,18 @@ extension Home.RootView {
                 .foregroundStyle(Color.loopYellow)
             }
 
-            // The basal readout is the longest of the three, so it gets first claim on the row's
-            // width. The mockup's fixed 1.25x is not reproduced literally — a hard ratio would clip
-            // under larger Dynamic Type sizes, where equal widths plus text scaling degrade better.
+            // All three chips are laid out at equal layout priority, so the `maxWidth: .infinity`
+            // inside `ModernStatChip` makes the HStack split the row into equal thirds.
+            //
+            // The basal readout is the longest of the three, but it does NOT get a layout priority
+            // bump: in an HStack the highest-priority child is offered all the remaining width
+            // first, and a child declaring `maxWidth: .infinity` accepts every point of it, which
+            // starved the IOB and COB chips down to their (near-zero, ellipsis-only) minimum width.
+            // The mockup's fixed 1.25x is not reproduced literally either — a hard ratio clips
+            // under larger Dynamic Type sizes. A third of the row fits "3.15 U/hr" at default type
+            // with room to spare, and the chip's own `lineLimit(1)` + `minimumScaleFactor` handle
+            // the rarer long forms (e.g. the manual-basal suffix) by scaling rather than clipping.
             modernBasalChip
-                .layoutPriority(1)
         }
     }
 
