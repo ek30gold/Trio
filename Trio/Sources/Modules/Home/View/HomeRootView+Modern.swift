@@ -13,16 +13,16 @@ extension Home.RootView {
     /// `modernChartCard`) because `MainChartView` sizes its pinned Y-axis off the full screen width.
     private var modernCardInset: CGFloat { 12 }
 
-    /// The three regions inside `MainChartView` are sized as fractions of the *screen* height
-    /// (0.05 basal + 0.28 main + 0.12 IOB/COB, summing to 0.45). Inside the chart card those fractions
-    /// are relative to the card instead, so they need scaling up to fill it while keeping the same
-    /// relative proportions.
+    /// Whether the layout is running on one of the shortest supported screens (4.7" iPhone SE and
+    /// below).
     ///
-    /// Deliberately below the naive `1 / 0.45` (≈2.22): those are *minimum* heights stacked in a
-    /// `VStack(spacing: 5)` with a `Spacer()`, so scaling them to exactly the card height leaves no
-    /// room for the ~15pt of inter-chart gaps and the content overflows. 2.0 fills ~90% of the card
-    /// and lets the gaps take the rest, with headroom at every card height the layout can produce.
-    private var modernChartHeightScale: CGFloat { 2.0 }
+    /// The Modern layout stacks strictly more chrome than Classic — three padded cards where Classic
+    /// has a bobble and a single text row — so on a short screen each card has to give up a few points
+    /// of padding for the chart to keep Classic's height. Uses the same screen-height threshold as
+    /// `UIDevice.adjustPadding`, which handles the padding values themselves.
+    private var modernIsCompactHeight: Bool {
+        UIScreen.screenHeight <= UIDevice.DeviceSize.smallDevice.rawValue
+    }
 
     // MARK: - Root
 
@@ -36,32 +36,36 @@ extension Home.RootView {
             } else {
                 modernGlucoseCard(geo)
                     .padding(.horizontal, modernCardInset)
-                    .padding(.top, 10)
+                    .padding(.top, UIDevice.adjustPadding(min: 6, max: 10))
 
                 modernDeviceChipsRow
                     .padding(.horizontal, modernCardInset)
-                    .padding(.top, UIDevice.adjustPadding(min: 5, max: 8))
+                    .padding(.top, UIDevice.adjustPadding(min: 3, max: 6))
             }
 
             modernStatChipsRow
                 .padding(.horizontal, modernCardInset)
-                .padding(.top, UIDevice.adjustPadding(min: 5, max: 8))
+                .padding(.top, UIDevice.adjustPadding(min: 3, max: 6))
 
             modernChartCard(geo)
                 .padding(.horizontal, 4)
-                .padding(.top, UIDevice.adjustPadding(min: 5, max: 8))
+                .padding(.top, UIDevice.adjustPadding(min: 3, max: 6))
 
             modernControlsRow
                 .padding(.horizontal, modernCardInset)
-                .padding(.vertical, UIDevice.adjustPadding(min: 4, max: 10))
+                .padding(.vertical, UIDevice.adjustPadding(min: 2, max: 6))
 
             if let progress = state.bolusProgress {
                 bolusView(geo: geo, progress)
-                    .padding(.bottom, UIDevice.adjustPadding(min: nil, max: 40))
+                    // `min: 0` rather than `min: nil`: `adjustPadding` returns its `min` verbatim on
+                    // short screens, and `padding(_:_:)` reads a nil length as the *system default*
+                    // (~16pt), not as zero — so `min: nil` would silently add padding on exactly the
+                    // device where the vertical budget is tightest.
+                    .padding(.bottom, UIDevice.adjustPadding(min: 0, max: 20))
             } else {
                 modernAdjustmentCard(geo)
                     .padding(.horizontal, modernCardInset)
-                    .padding(.bottom, UIDevice.adjustPadding(min: nil, max: 40))
+                    .padding(.bottom, UIDevice.adjustPadding(min: 0, max: 20))
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
@@ -144,11 +148,15 @@ extension Home.RootView {
 
     @ViewBuilder func modernGlucoseCard(_ geo: GeometryProxy) -> some View {
         // Scales with available height so the card does not crowd out the chart on smaller devices.
-        let glucoseFontSize = min(max(geo.size.height * 0.085, 40), 58)
+        // The 44pt ceiling keeps this card's three stacked rows within roughly the same vertical
+        // budget as Classic's 130pt glucose bobble, so the chart below can keep Classic's height.
+        // It is still comfortably larger than the 40pt `CurrentGlucoseView` uses.
+        let glucoseFontSize = min(max(geo.size.height * 0.07, 34), 44)
         let glucoseColor = modernGlucoseColor
+        let cardSpacing: CGFloat = modernIsCompactHeight ? 6 : 8
 
         ModernCard(cornerRadius: 22) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: cardSpacing) {
                 if state.cgmAvailable {
                     HStack(alignment: .top) {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -222,8 +230,8 @@ extension Home.RootView {
                 modernStatusPills
             }
             .padding(.horizontal, 16)
-            .padding(.top, 16)
-            .padding(.bottom, 14)
+            .padding(.top, modernIsCompactHeight ? 10 : 12)
+            .padding(.bottom, modernIsCompactHeight ? 8 : 10)
         }
         .contentShape(Rectangle())
         .onTapGesture {
@@ -319,7 +327,9 @@ extension Home.RootView {
                         .bold()
                 }
                 .frame(maxWidth: .infinity)
-                .frame(height: 30)
+                // Matches `ModernChip`'s default height so the empty state is the same size as the
+                // populated row it replaces.
+                .frame(height: 28)
             }
             .contentShape(Rectangle())
             .onTapGesture { modernPumpTapAction() }
@@ -453,32 +463,40 @@ extension Home.RootView {
 
     // MARK: - Chart card
 
-    @ViewBuilder func modernChartCard(_: GeometryProxy) -> some View {
+    /// The chart card.
+    ///
+    /// `MainChartView` sizes its three stacked regions (0.05 basal + 0.28 main + 0.12 IOB/COB, ~0.45
+    /// in total) as fractions of the `GeometryProxy` it is handed. It is deliberately handed the
+    /// *content* proxy — the same one `classicViewElements` passes to `mainChart(geo:)` — rather than
+    /// a proxy for this card, so the charts come out at exactly Classic's height instead of being
+    /// scaled down to whatever the surrounding cards happen to leave over. The card then sizes itself
+    /// to the chart rather than the other way round; every other element in the Modern layout is
+    /// budgeted against the remaining ~0.55 of the content height.
+    @ViewBuilder func modernChartCard(_ geo: GeometryProxy) -> some View {
         ModernCard(cornerRadius: 20) {
-            GeometryReader { chartGeo in
-                MainChartView(
-                    geo: chartGeo,
-                    // The notifications banner is handled by the enclosing layout's safe-area inset,
-                    // which already shrinks this card, so the chart must not subtract it a second time.
-                    safeAreaSize: 0,
-                    units: state.units,
-                    hours: state.filteredHours,
-                    highGlucose: state.highGlucose,
-                    lowGlucose: state.lowGlucose,
-                    currentGlucoseTarget: state.currentGlucoseTarget,
-                    glucoseColorScheme: state.glucoseColorScheme,
-                    screenHours: state.hours,
-                    displayXgridLines: state.displayXgridLines,
-                    displayYgridLines: state.displayYgridLines,
-                    thresholdLines: state.thresholdLines,
-                    state: state,
-                    chartHeightScale: modernChartHeightScale
-                )
-            }
-            .padding(.vertical, 8)
+            MainChartView(
+                geo: geo,
+                // Same subtraction Classic makes: the notifications banner is added as a safe-area
+                // inset on this layout's root `VStack`, so it takes its height out of the space the
+                // stack has to lay out in, and the chart has to give the same amount back.
+                safeAreaSize: notificationsDisabled == true ? safeAreaSize : 0,
+                units: state.units,
+                hours: state.filteredHours,
+                highGlucose: state.highGlucose,
+                lowGlucose: state.lowGlucose,
+                currentGlucoseTarget: state.currentGlucoseTarget,
+                glucoseColorScheme: state.glucoseColorScheme,
+                screenHours: state.hours,
+                displayXgridLines: state.displayXgridLines,
+                displayYgridLines: state.displayYgridLines,
+                thresholdLines: state.thresholdLines,
+                state: state
+            )
+            .padding(.vertical, UIDevice.adjustPadding(min: 2, max: 6))
         }
-        // Absorbs whatever vertical space the fixed-height elements above and below leave over, so a
-        // smaller device degrades by shrinking the chart rather than clipping the chips.
+        // The chart's own minimum heights set the floor; this lets the card additionally soak up any
+        // space the elements above and below do not use on a taller device, which `MainChartView`'s
+        // internal `Spacer()` passes on to the gap above the IOB/COB band.
         .frame(maxHeight: .infinity)
     }
 
@@ -603,7 +621,7 @@ extension Home.RootView {
                 }
             }
             .padding(.horizontal, 14)
-            .frame(height: max(geo.size.height * 0.075, 50))
+            .frame(height: max(geo.size.height * 0.068, 42))
             .confirmationDialog("Adjustment to Stop", isPresented: $showCancelConfirmDialog) {
                 Button("Stop Override", role: .destructive) {
                     Task {

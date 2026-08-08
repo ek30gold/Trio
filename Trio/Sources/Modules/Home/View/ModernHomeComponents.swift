@@ -42,7 +42,7 @@ struct ModernChip: View {
     let systemImage: String
     let value: String
     var tint: Color = .secondary
-    var height: CGFloat = 30
+    var height: CGFloat = 28
 
     var body: some View {
         ModernCard(cornerRadius: height / 2) {
@@ -95,7 +95,7 @@ struct ModernStatChip<Value: View>: View {
                     .minimumScaleFactor(0.7)
             }
             .padding(.horizontal, 6)
-            .padding(.vertical, 8)
+            .padding(.vertical, 6)
             // Every chip claims the full width offered to it, so an HStack of chips at equal layout
             // priority splits the row evenly. Do not give one chip a higher `layoutPriority`: the
             // stack offers the top-priority child all remaining width first, and because of this
@@ -126,8 +126,8 @@ struct GlucoseRangeRail: View {
     private let railLowerBound = Decimal(55)
     private let railUpperBound = Decimal(220)
 
-    private let railHeight: CGFloat = 8
-    private let thumbDiameter: CGFloat = 16
+    private let railHeight: CGFloat = 7
+    private let thumbDiameter: CGFloat = 14
 
     /// Colour for an arbitrary glucose value, mirroring `CurrentGlucoseView`'s call exactly —
     /// including its hardcoded 55/220 substitution under the dynamic scheme.
@@ -166,7 +166,7 @@ struct GlucoseRangeRail: View {
     }
 
     var body: some View {
-        VStack(spacing: 3) {
+        VStack(spacing: 2) {
             GeometryReader { geo in
                 let usableWidth = max(geo.size.width - thumbDiameter, 0)
 
