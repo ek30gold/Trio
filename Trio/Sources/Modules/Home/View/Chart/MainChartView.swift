@@ -20,6 +20,15 @@ struct MainChartView: View {
     var thresholdLines: Bool
     var state: Home.StateModel
 
+    /// Multiplier applied to the proportional heights of the three stacked chart regions.
+    ///
+    /// The basal (0.05), main (0.28) and IOB/COB (0.12) fractions are relative to the full screen
+    /// height, summing to ~0.45 of it. When the chart is embedded in a container that is itself only
+    /// a fraction of the screen — as in the Modern home layout's chart card — `geo` describes that
+    /// container instead, so the fractions need rescaling to fill it while keeping the same relative
+    /// proportions. Defaults to 1.0, which leaves the Classic layout's sizing untouched.
+    var chartHeightScale: CGFloat = 1.0
+
     @State var basalProfiles: [BasalProfile] = []
     @State var preparedTempBasals: [(start: Date, end: Date, rate: Double)] = []
     @State var selection: Date? = nil
@@ -232,7 +241,7 @@ extension MainChartView {
             }
             .id("MainChart")
             .frame(
-                minHeight: geo.size.height * (0.28 - safeAreaSize)
+                minHeight: geo.size.height * (0.28 - safeAreaSize) * chartHeightScale
             )
             .frame(width: fullWidth(viewWidth: screenSize.width))
             .chartXScale(domain: state.startMarker ... state.endMarker)

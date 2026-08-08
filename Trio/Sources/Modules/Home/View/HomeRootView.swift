@@ -887,6 +887,15 @@ extension Home {
         }
 
         @ViewBuilder func mainViewElements(_ geo: GeometryProxy) -> some View {
+            switch state.homeLayoutStyle {
+            case .classic:
+                classicViewElements(geo)
+            case .modern:
+                modernViewElements(geo)
+            }
+        }
+
+        @ViewBuilder func classicViewElements(_ geo: GeometryProxy) -> some View {
             VStack(spacing: 0) {
                 ZStack {
                     if let apsManager = state.apsManager, let bluetoothManager = apsManager.bluetoothManager,

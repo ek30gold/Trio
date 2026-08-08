@@ -15,6 +15,7 @@ extension UserInterfaceSettings {
         @Published var eA1cDisplayUnit: EstimatedA1cDisplayUnit = .percent
         @Published var timeInRangeType: TimeInRangeType = .timeInTightRange
         @Published var requireAdjustmentsConfirmation: Bool = false
+        @Published var homeLayoutStyle: HomeLayoutStyle = .classic
 
         var units: GlucoseUnits = .mgdL
 
@@ -48,6 +49,8 @@ extension UserInterfaceSettings {
 
             subscribeSetting(\.requireAdjustmentsConfirmation, on: $requireAdjustmentsConfirmation) {
                 requireAdjustmentsConfirmation = $0 }
+
+            subscribeSetting(\.homeLayoutStyle, on: $homeLayoutStyle) { homeLayoutStyle = $0 }
         }
     }
 }

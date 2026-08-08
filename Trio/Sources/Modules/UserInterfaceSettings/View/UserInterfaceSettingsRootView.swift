@@ -95,6 +95,61 @@ extension UserInterfaceSettings {
                                 ).buttonStyle(BorderlessButtonStyle())
                             }.padding(.top)
                         }.padding(.bottom)
+
+                        VStack {
+                            Picker(
+                                selection: $state.homeLayoutStyle,
+                                label: Text("Home Screen Design")
+                            ) {
+                                ForEach(HomeLayoutStyle.allCases) { selection in
+                                    Text(selection.displayName).tag(selection)
+                                }
+                            }.padding(.top)
+
+                            HStack(alignment: .center) {
+                                Text(
+                                    "Choose the layout of Trio's Main tab. See hint for more details."
+                                )
+                                .font(.footnote)
+                                .foregroundColor(.secondary)
+                                .lineLimit(nil)
+                                Spacer()
+                                Button(
+                                    action: {
+                                        hintLabel = String(localized: "Home Screen Design")
+                                        selectedVerboseHint =
+                                            AnyView(
+                                                VStack(alignment: .leading, spacing: 10) {
+                                                    Text(
+                                                        "Sets the layout of Trio's Main tab. Descriptions of each option found below."
+                                                    )
+                                                    VStack(alignment: .leading, spacing: 5) {
+                                                        Text("Classic:").bold()
+                                                        Text(
+                                                            "The original layout, with the gradient glucose ring"
+                                                        )
+                                                    }
+                                                    VStack(alignment: .leading, spacing: 5) {
+                                                        Text("Modern:").bold()
+                                                        Text(
+                                                            "A card-based layout, with a large glucose reading and an in-range indicator"
+                                                        )
+                                                    }
+                                                    Text(
+                                                        "Both layouts show the same information and behave identically. Nothing else in the app changes."
+                                                    )
+                                                }
+                                            )
+                                        shouldDisplayHint.toggle()
+                                    },
+                                    label: {
+                                        HStack {
+                                            Image(systemName: "questionmark.circle")
+                                        }
+                                    }
+                                ).buttonStyle(BorderlessButtonStyle())
+                            }.padding(.top)
+                        }.padding(.bottom)
                     }
                 ).settingsSearchTarget(label: String(localized: "Appearance"))
 

@@ -73,6 +73,7 @@ extension Home {
         var highGlucose: Decimal = 180
         var currentGlucoseTarget: Decimal = 100
         var glucoseColorScheme: GlucoseColorScheme = .staticColor
+        var homeLayoutStyle: HomeLayoutStyle = .classic
         var eA1cDisplayUnit: EstimatedA1cDisplayUnit = .percent
         var displayXgridLines: Bool = false
         var displayYgridLines: Bool = false
@@ -408,6 +409,7 @@ extension Home {
             manualTempBasal = apsManager.isManualTempBasal
             isSmoothingEnabled = settingsManager.settings.smoothGlucose
             glucoseColorScheme = settingsManager.settings.glucoseColorScheme
+            homeLayoutStyle = settingsManager.settings.homeLayoutStyle
             autosensMax = settingsManager.preferences.autosensMax
             lowGlucose = settingsManager.settings.low
             highGlucose = settingsManager.settings.high
@@ -676,6 +678,7 @@ extension Home.StateModel:
         }
         eA1cDisplayUnit = settingsManager.settings.eA1cDisplayUnit
         glucoseColorScheme = settingsManager.settings.glucoseColorScheme
+        homeLayoutStyle = settingsManager.settings.homeLayoutStyle
         displayXgridLines = settingsManager.settings.xGridLines
         displayYgridLines = settingsManager.settings.yGridLines
         thresholdLines = settingsManager.settings.rulerMarks
