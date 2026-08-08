@@ -126,6 +126,9 @@ private extension LiveActivityAttributes.ContentState {
             tempTargetDate: Date().addingTimeInterval(-1800),
             tempTargetDuration: 60,
             tempTargetTarget: 120,
+            basalRate: 0.85,
+            isTempBasalActive: true,
+            isInsulinSuspended: false,
             widgetItems: LiveActivityAttributes.LiveActivityItem.defaultItems
         )
 

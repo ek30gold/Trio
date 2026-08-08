@@ -65,7 +65,6 @@ extension Treatments {
         var factoredInsulin: Decimal = 0
         var insulinCalculated: Decimal = 0
         var fraction: Decimal = 0
-        var basal: Decimal = 0
         var fattyMeals: Bool = false
         var fattyMealFactor: Decimal = 0
         var useFattyMealCorrectionFactor: Bool = false
@@ -953,7 +952,6 @@ extension Treatments.StateModel {
             isf = (mostRecentDetermination.insulinSensitivity ?? currentISF as NSDecimalNumber) as Decimal
             cob = mostRecentDetermination.cob as Int16
             iob = (mostRecentDetermination.iob ?? 0) as Decimal
-            basal = (mostRecentDetermination.tempBasal ?? 0) as Decimal
             carbRatio = (mostRecentDetermination.carbRatio ?? currentCarbRatio as NSDecimalNumber) as Decimal
             insulinCalculated = await calculateInsulin()
         }
