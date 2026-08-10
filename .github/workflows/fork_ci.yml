@@ -90,6 +90,7 @@ jobs:
           key: ${{ runner.os }}-trio-${{ hashFiles('**/*.swift', '**/*.xcodeproj', '**/*.xcworkspace') }}
 
       - name: Run tests
+        id: run_tests
         run: |
           set -o pipefail
           time xcodebuild test-without-building \
@@ -101,19 +102,29 @@ jobs:
       - name: Annotate test results
         if: always()
         run: |
-          if [ -f xcodebuild.log ]; then
-            if grep -q "Failing tests:" xcodebuild.log; then
-              echo "::error title=Unit Tests Failed::Some tests failed"
-              echo "## ❌ Some tests failed:" >> $GITHUB_STEP_SUMMARY
+          # Ground truth is the "Run tests" step's own exit code (captured via its
+          # outcome), not a log grep. The project mixes XCTest and Swift Testing;
+          # Swift Testing's failure summary ("Test run with N tests in M suites
+          # failed ...") never contains the string "Failing tests:", so a grep for
+          # that alone reports a false "all tests passed" on a red Swift Testing
+          # run. Log parsing below is best-effort, for a readable summary only.
+          if [ "${{ steps.run_tests.outcome }}" = "success" ]; then
+            echo "::notice title=Unit Tests Passed::✅ All tests passed"
+            echo "✅ All tests passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "::error title=Unit Tests Failed::Some tests failed"
+            echo "## ❌ Some tests failed:" >> $GITHUB_STEP_SUMMARY
+            if [ -f xcodebuild.log ]; then
+              # XCTest-style failure list
               grep -A 20 "Failing tests:" xcodebuild.log | \
                 grep -E '^\s+[A-Za-z0-9]+\..+\(\)' | \
                 sed 's/^/  - /' >> $GITHUB_STEP_SUMMARY
+              # Swift Testing-style failure list: `✘ Test "Name" failed after ...`
+              grep -E '^✘ Test ".*" failed after' xcodebuild.log | \
+                sed -E 's/^✘ Test "(.*)" failed after.*/  - \1/' >> $GITHUB_STEP_SUMMARY
             else
-              echo "::notice title=Unit Tests Passed::✅ All tests passed"
-              echo "✅ All tests passed" >> $GITHUB_STEP_SUMMARY
+              echo "::warning::Test log (xcodebuild.log) not found"
             fi
-          else
-            echo "::warning::Test log (xcodebuild.log) not found"
           fi
 
       - name: Upload build log

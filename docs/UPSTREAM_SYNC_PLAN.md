@@ -349,9 +349,69 @@ Then, in the GitHub web UI:
 
 Record the result of the gate here before moving to Phase 2:
 
-- [ ] Fork CI green on `spike/upstream-base`
-- [ ] test suite green (record failures if any)
-- [ ] TestFlight build succeeded
+- [x] Fork CI ran on `spike/upstream-base` — **compile succeeded, test step failed**
+      ([run 31281337937](https://github.com/ek30gold/Trio/actions/runs/31281337937),
+      2026-08-08)
+- [ ] test suite green — **555/557 passed**; 1 test failing, see below
+- [ ] TestFlight build succeeded — not yet attempted, blocked on nothing (build
+      compiles fine); do this next
 - [ ] runs on device with real pump + CGM
 - [ ] lived with stock home refactor — Modern layout verdict: _(keep / drop / partial)_
-- [ ] `SCHEDULED_SYNC` set to `false` in repo variables
+- [ ] `SCHEDULED_SYNC` set to `false` in repo variables — **still needs to be done
+      in GitHub Settings**, cannot be set from code
+
+### Run 1 result (2026-08-08): compile clean, one pre-existing test failure
+
+`xcodebuild build-for-testing` succeeded in ~7.5 min. `test-without-building` ran
+557 tests across 80 suites in ~22s and failed 2 assertions, both in the same test:
+`FileStorageTests.testParseSettingsToMgdL` ("Can parse mmol/L settings to mg/dL"),
+`TrioTests/FileStorageTests.swift:137,139`.
+
+```
+✘ Test "Can parse mmol/L settings to mg/dL" recorded an issue at FileStorageTests.swift:137:9:
+    Expectation failed: (wasParsed → false) == true
+✘ Test "Can parse mmol/L settings to mg/dL" recorded an issue at FileStorageTests.swift:139:9:
+    Expectation failed: (parsed?.threshold_setting → 60) == 100
+```
+
+**Read on this failure:** the test saves `threshold_setting = 5.5` (mmol/L) and
+expects `parseOnFileSettingsToMgdL()` to detect and convert it to `100` (mg/dL).
+The observed value, `60`, matches *neither* the input (`5.5`) nor the expected
+output (`100`) — the signature of a stale value left on disk by a different test,
+not a broken conversion. `BaseFileStorage` persists to a real file keyed by
+`OpenAPS.Settings.preferences`, shared across the whole test bundle; the suite
+carries `@Suite(.serialized)` (added in `7c1bd62e6`, already present in our
+v0.8.4 base) which only serializes tests *within* that suite, not against other
+suites touching the same file concurrently. `xcodebuild test-without-building`
+also had no `-parallel-testing-enabled` flag either way, so Swift Testing's
+default concurrent execution across suites stands.
+
+Confirmed this is **not new**: `parseOnFileSettingsToMgdL()` and this test both
+predate the fork's v0.8.4 base commit (`29350e31`) — nothing in the 920-commit
+gap touched them. So this is either a pre-existing flake in upstream's own test
+suite (plausible — `unit_tests.yml` is gated to the nightscout org, so it may
+rarely run against a from-scratch checkout without inherited simulator state) or
+something specific to running the full suite unparallelized-across-suites for the
+first time. Either way: **not a dosing-algorithm regression**, and not something
+introduced by porting our fork's features onto `dev`.
+
+**Follow-up, not urgent:** re-run to check if it's flaky (rerun the same commit,
+see if the failure moves or disappears), and decide whether to file it upstream
+if reproducible. Does not block Phase 1 otherwise — 555/557 with an isolated,
+explainable, non-dosing failure is a good baseline.
+
+**Workflow bug found and fixed in the same run:** `fork_ci.yml`'s original
+"Annotate test results" step grepped the log for the literal string
+`"Failing tests:"`, which is XCTest's failure-summary marker. Swift Testing (used
+by the newer `@Test`/`@Suite` tests, including the one above) never prints that
+string — its own failure summary is `Test run with N tests in M suites failed`.
+Result: **the annotation printed "✅ All tests passed" on a run that had just
+failed**, even though the job's actual pass/fail status (and exit code 65) were
+correct throughout. Fixed by keying the annotation off the "Run tests" step's own
+`outcome` instead of re-deriving it from a log grep, with log parsing now used
+only for the best-effort failing-test list (extended to also match Swift
+Testing's `✘ Test "Name" failed after ...` format). Verified against the real
+failure log above before trusting it. Not yet re-run through CI to confirm end to
+end — the offline check reproduces the exact bug and fix against real log text,
+which was enough to trust it, but a future CI run on this workflow file will be
+the first live confirmation.
