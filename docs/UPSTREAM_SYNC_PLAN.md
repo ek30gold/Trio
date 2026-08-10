@@ -294,6 +294,33 @@ are byte-identical with the projection code present vs absent.
   what upstream lacks. `DummyCharts.swift` is gone — whatever used it needs a new
   home.
 
+  **They don't compete on the same axis — read this before assuming overlap.**
+  Compared the actual implementations, not just the diffstat:
+
+  - Upstream's `GlassChrome.swift` renders real iOS 26 Liquid Glass
+    (`.glassEffect(...)`) with a material fallback below iOS 26 — a
+    system-native chrome treatment.
+  - The fork's `ModernCard` is a flat opaque card (`Color.chart` fill + hairline
+    border + soft shadow) — a conventional card-design skin, no Liquid Glass.
+  - Upstream also added real *information-architecture* changes with no fork
+    equivalent: `MultiUsePanelState.resolve(...)` is a priority state machine
+    (notifications-disabled > pump-time-mismatch > CGM-stale > max-IOB-zero >
+    stats) that decides what the panel shows; `HomeStatsPanelFace` is a
+    user-switchable stats display (time-in-range / distribution bar /
+    today's averages).
+  - The fork's own `HomeRootView+Modern.swift` states outright: *"Every
+    readout, tap target, gesture and piece of state here is the same as the
+    Classic layout's — this file changes presentation only."* No new
+    information, no priority logic — a different skin over identical content.
+
+  **Conclusion:** upstream's refactor changes *what* information is shown and
+  how it's prioritized; the Modern layout branch changes only *how existing*
+  information looks. Upstream's work does not obsolete it — re-porting is
+  "apply a skin on top of the new structure," not "reconcile two competing
+  designs." Whether it's still worth the effort is a taste call for daily use,
+  not a redundancy call — the file-level collision list in §3 still stands as
+  the actual cost.
+
 **Phase 4 — prevent recurrence**
 
 Keep `upstream` as a permanent remote and sync on **every upstream release tag**.
@@ -395,10 +422,33 @@ something specific to running the full suite unparallelized-across-suites for th
 first time. Either way: **not a dosing-algorithm regression**, and not something
 introduced by porting our fork's features onto `dev`.
 
-**Follow-up, not urgent:** re-run to check if it's flaky (rerun the same commit,
-see if the failure moves or disappears), and decide whether to file it upstream
-if reproducible. Does not block Phase 1 otherwise — 555/557 with an isolated,
-explainable, non-dosing failure is a good baseline.
+**Root cause confirmed** (not just theorized) by reading the actual code:
+
+1. `Preferences`'s `Decodable` init is deliberately lenient — every field is
+   decoded with `try? container.decode(...)`, starting from `Preferences()`
+   defaults and only overwriting keys present in the JSON
+   (`Preferences.swift:280-330`). A payload missing `threshold_setting` silently
+   keeps the struct default, `60` — which is exactly the observed value.
+2. At least six other production code paths save to that same shared file
+   (`SettingsManager.swift:55`, `DeviceDataManager.swift:108,202`,
+   `AlgorithmAdvancedSettingsProvider.swift:19`, `WatchConfigProvider.swift:16`).
+   Several are DI-resolved services plausibly instantiated as a side effect of
+   *other* suites running concurrently in the same test bundle.
+
+So: this test saves `threshold_setting = 5.5`, and in the window before its own
+two retrieves, a concurrently-running suite resolves one of those services and
+saves *its own* preferences object to the same physical file — a payload that
+omits `threshold_setting` — which the lenient decoder reads back as the default,
+`60`. A real (minor) test-isolation gap in upstream's own suite: one shared file
+across the whole bundle, with `.serialized` only protecting a test against
+others in its *own* suite. Not related to the 920-commit gap or anything this
+fork's features touch.
+
+**Follow-up, not urgent:** confirm by re-running (if the failure moves to a
+different assertion or disappears depending on run order, that supports this
+theory further), and consider filing upstream if reproducible on their own CI.
+Does not block Phase 1 otherwise — 555/557 with an isolated, explained,
+non-dosing failure is a good baseline.
 
 **Workflow bug found and fixed in the same run:** `fork_ci.yml`'s original
 "Annotate test results" step grepped the log for the literal string
