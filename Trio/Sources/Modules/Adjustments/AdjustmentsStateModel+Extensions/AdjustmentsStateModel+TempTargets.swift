@@ -150,7 +150,8 @@ extension Adjustments.StateModel {
             reason: TempTarget.custom,
             isPreset: false,
             enabled: false,
-            halfBasalTarget: halfBasalTarget
+            halfBasalTarget: halfBasalTarget,
+            isScheduled: true
         )
 
         try await tempTargetStorage.storeTempTarget(tempTarget: tempTarget)
@@ -192,6 +193,7 @@ extension Adjustments.StateModel {
                 }
 
                 tempTarget.enabled = true
+                tempTarget.isScheduled = false // it has started; no longer pending
                 try viewContext.save()
                 isTempTargetEnabled = true
             }

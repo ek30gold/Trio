@@ -10,5 +10,7 @@ final class APSAssembly: Assembly {
         container.register(BluetoothStateManager.self) { r in BaseBluetoothStateManager(resolver: r) }
         container.register(PluginManager.self) { r in BasePluginManager(resolver: r) }
         container.register(CalibrationService.self) { r in BaseCalibrationService(resolver: r) }
+        container.register(ScheduledOverrideManager.self) { r in BaseScheduledOverrideManager(resolver: r) }
+            .inObjectScope(.container)
     }
 }

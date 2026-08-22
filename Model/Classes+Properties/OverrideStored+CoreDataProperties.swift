@@ -17,6 +17,11 @@ public extension OverrideStored {
     @NSManaged var isf: Bool
     @NSManaged var isfAndCr: Bool
     @NSManaged var isPreset: Bool
+    /// Marks a row created by "Schedule Override" that has not yet been activated.
+    /// Distinguishes a pending scheduled Override from a cancelled or finished one — without it,
+    /// the two are identical (`enabled == false`, `isPreset == false`, past `date`) and catch-up
+    /// would re-activate Overrides the user had cancelled.
+    @NSManaged var isScheduled: Bool
     @NSManaged var isUploadedToNS: Bool
     @NSManaged var name: String?
     @NSManaged var orderPosition: Int16

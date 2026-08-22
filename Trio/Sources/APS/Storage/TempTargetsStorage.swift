@@ -12,6 +12,7 @@ protocol TempTargetsStorage {
     func saveTempTargetsToStorage(_ targets: [TempTarget])
     func fetchForTempTargetPresets() async throws -> [NSManagedObjectID]
     func fetchScheduledTempTargets() async throws -> [NSManagedObjectID]
+    func fetchDueScheduledTempTargets(asOf date: Date) async throws -> [NSManagedObjectID]
     func fetchScheduledTempTarget(for targetDate: Date) async throws -> [NSManagedObjectID]
     @MainActor func copyRunningTempTarget(_ tempTarget: TempTargetStored) async -> NSManagedObjectID
     func deleteTempTargetPreset(_ objectID: NSManagedObjectID) async
@@ -78,9 +79,10 @@ final class BaseTempTargetsStorage: TempTargetsStorage, Injectable {
         }
     }
 
+    /// Scheduled Temp Targets that have not started yet, for display and for re-arming timers.
     func fetchScheduledTempTargets() async throws -> [NSManagedObjectID] {
         let scheduledTempTargets = NSPredicate(
-            format: "date > %@ AND enabled == false AND isPreset == false",
+            format: "isScheduled == YES AND date > %@ AND enabled == false AND isPreset == false",
             Date() as NSDate
         )
 
@@ -101,10 +103,40 @@ final class BaseTempTargetsStorage: TempTargetsStorage, Injectable {
         }
     }
 
+    /// Scheduled Temp Targets whose start time has arrived or passed and which never activated.
+    /// No `date > now` bound — the point is to find ones missed while the app was not running.
+    /// `isScheduled` is what keeps a cancelled Temp Target out of the results.
+    func fetchDueScheduledTempTargets(asOf date: Date) async throws -> [NSManagedObjectID] {
+        let predicate = NSPredicate(
+            format: "isScheduled == YES AND date <= %@ AND enabled == false AND isPreset == false",
+            date as NSDate
+        )
+
+        let results = try await CoreDataStack.shared.fetchEntitiesAsync(
+            ofType: TempTargetStored.self,
+            onContext: context,
+            predicate: predicate,
+            key: "date",
+            ascending: true
+        )
+
+        return try await context.perform {
+            guard let fetchedResults = results as? [TempTargetStored] else {
+                throw CoreDataError.fetchError(function: #function, file: #file)
+            }
+
+            return fetchedResults.map(\.objectID)
+        }
+    }
+
     func fetchScheduledTempTarget(for targetDate: Date) async throws -> [NSManagedObjectID] {
         let lower = targetDate.addingTimeInterval(-1)
         let upper = targetDate.addingTimeInterval(1)
-        let predicate = NSPredicate(format: "date >= %@ AND date <= %@", lower as NSDate, upper as NSDate)
+        let predicate = NSPredicate(
+            format: "isScheduled == YES AND date >= %@ AND date <= %@",
+            lower as NSDate,
+            upper as NSDate
+        )
 
         let results = try await CoreDataStack.shared.fetchEntitiesAsync(
             ofType: TempTargetStored.self,
@@ -141,6 +173,7 @@ final class BaseTempTargetsStorage: TempTargetsStorage, Injectable {
             newTempTarget.name = tempTarget.name
             newTempTarget.target = NSDecimalNumber(decimal: tempTarget.targetTop ?? 0)
             newTempTarget.isPreset = tempTarget.isPreset ?? false
+            newTempTarget.isScheduled = tempTarget.isScheduled
             newTempTarget.enteredBy = tempTarget.enteredBy
 
             // Nullify half basal target to ensure the latest HBT is used via OpenAPS Manager when sending TT data to oref

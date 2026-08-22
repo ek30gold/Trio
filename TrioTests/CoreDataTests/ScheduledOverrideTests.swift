@@ -5,17 +5,21 @@ import Testing
 
 @testable import Trio
 
-/// Tests covering the persistence layer that scheduled Override activation depends on.
+/// Tests for scheduled Override activation.
 ///
-/// A scheduled Override is stored by `EditOverrideForm` as a regular `OverrideStored` row with
-/// `enabled == false`, `isPreset == false` and `date` set to the future activation time. Nothing
-/// in the record marks it as "scheduled" — that state is inferred purely from those three fields.
-/// Activation is then driven by an in-process `Task` (`waitUntilDate`) held in
-/// `Adjustments.StateModel.scheduledOverrideTasks`, which does not survive app suspension or
-/// termination.
+/// A scheduled Override is stored as an `OverrideStored` row with `enabled == false`,
+/// `isPreset == false`, `isScheduled == true` and `date` set to the intended start time.
 ///
-/// These tests pin down what the storage layer can and cannot recover once that in-process task is
-/// gone.
+/// The bug these cover: activation used to be driven by an in-process `Task.sleep` armed from
+/// `Adjustments.StateModel.subscribe()`, which only runs when the Adjustments screen appears. If
+/// the app was terminated and relaunched in the background, nothing re-armed it, the Override never
+/// started, and once its start time passed it was unreachable — the "scheduled overnight, did not
+/// fire in the morning" failure.
+///
+/// Two things fix it, and both are covered here: `isScheduled` makes a pending Override
+/// distinguishable from a cancelled one (so catch-up cannot resurrect a cancelled Override), and
+/// `fetchDueScheduledOverrides(asOf:)` finds past-due Overrides so an app-lifetime service can act
+/// on them.
 @Suite("Scheduled Override Tests", .serialized) struct ScheduledOverrideTests: Injectable {
     @Injected() var storage: OverrideStorage!
     let resolver: Resolver
@@ -42,15 +46,19 @@ import Testing
         injectServices(resolver)
     }
 
-    /// Builds an Override in the exact shape `EditOverrideForm`'s "Schedule Override" button stores:
-    /// not enabled, not a preset, with `date` carrying the intended activation time.
-    private func makeScheduledOverride(name: String, activationDate: Date) -> Override {
+    /// Builds an Override in the shape `EditOverrideForm`'s "Schedule Override" button stores.
+    private func makeScheduledOverride(
+        name: String,
+        activationDate: Date,
+        durationMinutes: Decimal = 60,
+        indefinite: Bool = false
+    ) -> Override {
         Override(
             name: name,
             enabled: false,
             date: activationDate,
-            duration: 60,
-            indefinite: false,
+            duration: durationMinutes,
+            indefinite: indefinite,
             percentage: 130,
             smbIsOff: false,
             isPreset: false,
@@ -65,7 +73,8 @@ import Testing
             start: 0,
             end: 0,
             smbMinutes: 30,
-            uamMinutes: 30
+            uamMinutes: 30,
+            isScheduled: true
         )
     }
 
@@ -77,96 +86,63 @@ import Testing
         }
     }
 
-    // MARK: - Control
+    // MARK: - Pending vs. due
 
     @Test("Pending scheduled override is discoverable before its activation time")
     func testPendingScheduledOverrideIsDiscoverable() async throws {
-        // Given an override scheduled to start in one hour
         let activationDate = Date().addingTimeInterval(60 * 60)
         try await storage.storeOverride(override: makeScheduledOverride(
             name: "Pending Override",
             activationDate: activationDate
         ))
 
-        // When the app enumerates scheduled overrides (on launch, and to populate the UI list)
         let scheduledIDs = try await storage.fetchScheduledOverrides()
-
-        // Then it is found, so `restartPendingScheduledOverrideTask()` can re-arm its timer
         let foundNames = try await names(of: scheduledIDs)
-        #expect(scheduledIDs.count == 1, "A future-dated scheduled override should be discoverable")
+
+        #expect(scheduledIDs.count == 1, "A future-dated scheduled override should be listed as pending")
         #expect(foundNames == ["Pending Override"], "Should find the pending override")
     }
 
-    // MARK: - The defect
+    @Test("A pending scheduled override is not yet due")
+    func testPendingOverrideIsNotDue() async throws {
+        try await storage.storeOverride(override: makeScheduledOverride(
+            name: "Pending Override",
+            activationDate: Date().addingTimeInterval(60 * 60)
+        ))
 
-    @Test("Scheduled override whose activation time passed while the app was not running is orphaned")
-    func testMissedScheduledOverrideIsOrphaned() async throws {
-        // Given an override that was scheduled for 30 minutes ago and never activated, because the
-        // in-process `waitUntilDate` task did not survive suspension/termination.
-        // The stored `date` is fixed at the intended activation time; only "now" moves past it.
+        let dueIDs = try await storage.fetchDueScheduledOverrides(asOf: Date())
+
+        #expect(dueIDs.isEmpty, "An override scheduled for the future must not be activated early")
+    }
+
+    // MARK: - The fix: missed overrides are recoverable
+
+    @Test("Scheduled override missed while the app was not running is found by catch-up")
+    func testMissedScheduledOverrideIsFoundByCatchUp() async throws {
+        // The app was terminated overnight; this override's start time passed with nothing running.
         let missedActivationDate = Date().addingTimeInterval(-30 * 60)
         try await storage.storeOverride(override: makeScheduledOverride(
             name: "Missed Override",
             activationDate: missedActivationDate
         ))
 
-        // When the app relaunches and enumerates scheduled overrides
-        let scheduledIDs = try await storage.fetchScheduledOverrides()
+        // It is correctly no longer "pending"...
+        let pendingIDs = try await storage.fetchScheduledOverrides()
+        #expect(pendingIDs.isEmpty, "A past-due override is no longer pending")
 
-        // Then the override has vanished from the scheduled list. `fetchScheduledOverrides()`
-        // filters on `date > now`, so a past-due override can never be re-armed by
-        // `restartPendingScheduledOverrideTask()` (which additionally guards `scheduledDate > Date()`),
-        // and never appears in the UI's scheduled list.
-        //
-        // The record still exists with `enabled == false`: it is neither active nor pending —
-        // it is stranded, and the user is given no indication that it silently failed to start.
-        #expect(
-            scheduledIDs.isEmpty,
-            "Past-due scheduled override is not discoverable — it can never be activated or surfaced to the user"
-        )
+        // ...but the catch-up query, which has no `date > now` bound, still finds it. Previously
+        // nothing could reach it and it was stranded forever.
+        let dueIDs = try await storage.fetchDueScheduledOverrides(asOf: Date())
+        let dueNames = try await names(of: dueIDs)
 
-        // Confirm the row genuinely still exists and is simply unreachable, rather than deleted
-        let allStored = try await coreDataStack.fetchEntitiesAsync(
-            ofType: OverrideStored.self,
-            onContext: testContext,
-            predicate: NSPredicate(format: "name == %@", "Missed Override"),
-            key: "date",
-            ascending: false
-        ) as? [OverrideStored]
-
-        let (storedCount, storedEnabled) = await testContext.perform {
-            (allStored?.count ?? 0, allStored?.first?.enabled ?? true)
-        }
-        #expect(storedCount == 1, "The stranded override row still exists in Core Data")
-        #expect(storedEnabled == false, "The stranded override never became active")
+        #expect(dueIDs.count == 1, "A missed scheduled override must be recoverable by catch-up")
+        #expect(dueNames == ["Missed Override"], "Should find the missed override")
     }
 
-    @Test("A missed scheduled override is still recoverable by exact activation date")
-    func testMissedScheduledOverrideIsRecoverableByDate() async throws {
-        // Given the same missed scheduled override
-        let missedActivationDate = Date().addingTimeInterval(-30 * 60)
-        try await storage.storeOverride(override: makeScheduledOverride(
-            name: "Missed Override",
-            activationDate: missedActivationDate
-        ))
-
-        // When looked up by its exact activation date — the path `activateScheduledOverride(for:)`
-        // uses, which carries no `date > now` constraint
-        let ids = try await storage.fetchScheduledOverride(for: missedActivationDate)
-
-        // Then the record is found. The data is recoverable; the gap is that after a missed window
-        // nothing ever calls this — only a user tapping the local notification does.
-        let recoveredNames = try await names(of: ids)
-        #expect(ids.count == 1, "The missed override is still addressable by its exact activation date")
-        #expect(recoveredNames == ["Missed Override"], "Should resolve the missed override")
-    }
-
-    // MARK: - Constraint on any fix
-
-    @Test("A missed scheduled override is indistinguishable from a cancelled override")
-    func testMissedScheduledOverrideIsIndistinguishableFromCancelledOverride() async throws {
-        // Given a cancelled custom override: `cancelOverride(withID:)` sets `enabled = false` and
-        // leaves `date` at its original (now past) activation time. It is not a preset.
+    @Test("Catch-up never resurrects a cancelled override")
+    func testCatchUpIgnoresCancelledOverrides() async throws {
+        // A cancelled custom override: `enabled == false`, `isPreset == false`, past `date`.
+        // Identical to a missed scheduled override in every field except `isScheduled`.
         try await storage.storeOverride(override: Override(
             name: "Cancelled Override",
             enabled: false,
@@ -188,40 +164,163 @@ import Testing
             end: 0,
             smbMinutes: 30,
             uamMinutes: 30
+            // isScheduled defaults to false
         ))
 
-        // And a scheduled override that was missed
         try await storage.storeOverride(override: makeScheduledOverride(
             name: "Missed Override",
             activationDate: Date().addingTimeInterval(-30 * 60)
         ))
 
-        // When applying the catch-up predicate an obvious fix would reach for —
-        // "activate anything disabled, non-preset and past due"
-        let catchUpCandidates = try await coreDataStack.fetchEntitiesAsync(
-            ofType: OverrideStored.self,
-            onContext: testContext,
-            predicate: NSPredicate(
-                format: "enabled == %@ AND isPreset == %@ AND date <= %@",
-                false as NSNumber,
-                false as NSNumber,
-                Date() as NSDate
-            ),
-            key: "date",
-            ascending: true
-        ) as? [OverrideStored]
+        let dueIDs = try await storage.fetchDueScheduledOverrides(asOf: Date())
+        let dueNames = try await names(of: dueIDs)
 
-        let candidateNames = await testContext.perform {
-            (catchUpCandidates ?? []).compactMap(\.name).sorted()
-        }
+        // Without `isScheduled` both rows matched, and catch-up would have re-enabled an override
+        // the user had explicitly cancelled — unacceptable for dosing.
+        #expect(dueNames == ["Missed Override"], "Only the scheduled override is eligible for catch-up")
+    }
+}
 
-        // Then both rows match. `OverrideStored` has no attribute marking a row as
-        // "scheduled, not yet activated", so a naive catch-up would resurrect an override the user
-        // had explicitly cancelled — unacceptable for dosing. Any fix needs an explicit marker
-        // distinguishing a pending scheduled override from a finished or cancelled one.
-        #expect(
-            candidateNames == ["Cancelled Override", "Missed Override"],
-            "Cancelled and missed-scheduled overrides are indistinguishable under the current schema"
+/// Scheduled Temp Targets had the identical defect, so they get the identical coverage.
+@Suite("Scheduled Temp Target Tests", .serialized) struct ScheduledTempTargetTests: Injectable {
+    @Injected() var storage: TempTargetsStorage!
+    let resolver: Resolver
+    var coreDataStack: CoreDataStack!
+    var testContext: NSManagedObjectContext!
+
+    init() async throws {
+        coreDataStack = try await CoreDataStack.createForTests()
+        testContext = coreDataStack.newTaskContext()
+
+        let assembler = Assembler([
+            StorageAssembly(),
+            ServiceAssembly(),
+            APSAssembly(),
+            NetworkAssembly(),
+            UIAssembly(),
+            SecurityAssembly(),
+            TestAssembly(testContext: testContext)
+        ])
+
+        resolver = assembler.resolver
+        injectServices(resolver)
+    }
+
+    private func makeTempTarget(name: String, at date: Date, isScheduled: Bool) -> TempTarget {
+        TempTarget(
+            name: name,
+            createdAt: date,
+            targetTop: 120,
+            targetBottom: 120,
+            duration: 60,
+            enteredBy: TempTarget.local,
+            reason: TempTarget.custom,
+            isPreset: false,
+            enabled: false,
+            halfBasalTarget: 160,
+            isScheduled: isScheduled
         )
+    }
+
+    private func names(of ids: [NSManagedObjectID]) async throws -> [String] {
+        try await testContext.perform {
+            try ids.compactMap { id in
+                (try testContext.existingObject(with: id) as? TempTargetStored)?.name
+            }
+        }
+    }
+
+    @Test("Missed scheduled temp target is found by catch-up")
+    func testMissedScheduledTempTargetIsFoundByCatchUp() async throws {
+        try await storage.storeTempTarget(tempTarget: makeTempTarget(
+            name: "Missed TT",
+            at: Date().addingTimeInterval(-30 * 60),
+            isScheduled: true
+        ))
+
+        let pendingIDs = try await storage.fetchScheduledTempTargets()
+        #expect(pendingIDs.isEmpty, "A past-due temp target is no longer pending")
+
+        let dueIDs = try await storage.fetchDueScheduledTempTargets(asOf: Date())
+        let dueNames = try await names(of: dueIDs)
+
+        #expect(dueNames == ["Missed TT"], "A missed scheduled temp target must be recoverable by catch-up")
+    }
+
+    @Test("Catch-up never resurrects a cancelled temp target")
+    func testCatchUpIgnoresCancelledTempTargets() async throws {
+        try await storage.storeTempTarget(tempTarget: makeTempTarget(
+            name: "Cancelled TT",
+            at: Date().addingTimeInterval(-45 * 60),
+            isScheduled: false
+        ))
+        try await storage.storeTempTarget(tempTarget: makeTempTarget(
+            name: "Missed TT",
+            at: Date().addingTimeInterval(-30 * 60),
+            isScheduled: true
+        ))
+
+        let dueIDs = try await storage.fetchDueScheduledTempTargets(asOf: Date())
+        let dueNames = try await names(of: dueIDs)
+
+        #expect(dueNames == ["Missed TT"], "Only the scheduled temp target is eligible for catch-up")
+    }
+}
+
+/// The catch-up policy itself, exercised without Core Data.
+@Suite("Scheduled Override Catch-Up Policy") struct ScheduledOverrideCatchUpTests {
+    private let grace: TimeInterval = 15 * 60
+    private let now = Date()
+
+    private func decide(lateBy minutes: Double, duration: Decimal = 60, indefinite: Bool = false)
+        -> ScheduledOverrideCatchUp.Decision
+    {
+        ScheduledOverrideCatchUp.decide(
+            scheduledStart: now.addingTimeInterval(-minutes * 60),
+            now: now,
+            durationMinutes: duration,
+            indefinite: indefinite,
+            grace: grace
+        )
+    }
+
+    @Test("Activates on time with the full duration intact")
+    func testOnTimeActivation() {
+        #expect(decide(lateBy: 0) == .activate(trimmedDurationMinutes: 60))
+    }
+
+    @Test("Trims the duration so a late start still ends when originally intended")
+    func testLateActivationTrimsDuration() {
+        // Scheduled 6:00-7:00, started 6:05 → 55 minutes left, still ending at 7:00.
+        #expect(decide(lateBy: 5) == .activate(trimmedDurationMinutes: 55))
+    }
+
+    @Test("Activates just inside the grace window")
+    func testBoundaryInsideGrace() {
+        #expect(decide(lateBy: 15) == .activate(trimmedDurationMinutes: 45))
+    }
+
+    @Test("Drops an override that is past the grace window")
+    func testTooStaleIsDropped() {
+        // The overnight-gap case: too long unattended to start a dosing change now.
+        #expect(decide(lateBy: 16) == .drop(.tooStale))
+        #expect(decide(lateBy: 8 * 60) == .drop(.tooStale))
+    }
+
+    @Test("Drops an override whose own window already elapsed")
+    func testAlreadyElapsedIsDropped() {
+        // A 10-minute override started 12 minutes late has nothing left to run, even though 12
+        // minutes is inside the grace window.
+        #expect(decide(lateBy: 12, duration: 10) == .drop(.alreadyElapsed))
+    }
+
+    @Test("Indefinite overrides activate without trimming")
+    func testIndefiniteIsNotTrimmed() {
+        #expect(decide(lateBy: 10, duration: 0, indefinite: true) == .activate(trimmedDurationMinutes: nil))
+    }
+
+    @Test("An indefinite override past the grace window is still dropped")
+    func testIndefiniteStillRespectsGrace() {
+        #expect(decide(lateBy: 60, duration: 0, indefinite: true) == .drop(.tooStale))
     }
 }

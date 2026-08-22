@@ -12,6 +12,8 @@ struct TempTarget: JSON, Identifiable, Equatable, Hashable {
     let isPreset: Bool?
     var enabled: Bool?
     let halfBasalTarget: Decimal?
+    /// True only for a Temp Target scheduled to start later that has not started yet.
+    var isScheduled: Bool = false
 
     static let local = "Trio"
     static let custom = "Temp Target"

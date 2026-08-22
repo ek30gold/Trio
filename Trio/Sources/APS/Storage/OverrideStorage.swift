@@ -20,6 +20,7 @@ protocol OverrideStorage {
     func getPresetOverridesForNightscout() async throws -> [NightscoutPresetOverride]
     func fetchLatestActiveOverride() async throws -> NSManagedObjectID?
     func fetchScheduledOverrides() async throws -> [NSManagedObjectID]
+    func fetchDueScheduledOverrides(asOf date: Date) async throws -> [NSManagedObjectID]
     func fetchScheduledOverride(for date: Date) async throws -> [NSManagedObjectID]
 }
 
@@ -129,6 +130,7 @@ final class BaseOverrideStorage: @preconcurrency OverrideStorage, Injectable {
             newOverride.id = UUID().uuidString
             newOverride.date = override.date
             newOverride.isPreset = override.isPreset
+            newOverride.isScheduled = override.isScheduled
             newOverride.isUploadedToNS = false
 
             // Assign orderPosition if it's a preset and presetCount is valid
@@ -181,6 +183,7 @@ final class BaseOverrideStorage: @preconcurrency OverrideStorage, Injectable {
         newOverride.smbIsOff = override.smbIsOff
         newOverride.name = override.name
         newOverride.isPreset = false // no Preset
+        newOverride.isScheduled = false // a copy of a running Override is already started
         newOverride.date = override.date?
             .addingTimeInterval(
                 1.seconds
@@ -410,15 +413,44 @@ final class BaseOverrideStorage: @preconcurrency OverrideStorage, Injectable {
         }
     }
 
+    /// Scheduled Overrides that have not started yet, for display and for re-arming timers.
     func fetchScheduledOverrides() async throws -> [NSManagedObjectID] {
         let results = try await CoreDataStack.shared.fetchEntitiesAsync(
             ofType: OverrideStored.self,
             onContext: context,
             predicate: NSPredicate(
-                format: "enabled == %@ AND isPreset == %@ AND date > %@",
+                format: "isScheduled == %@ AND enabled == %@ AND isPreset == %@ AND date > %@",
+                true as NSNumber,
                 false as NSNumber,
                 false as NSNumber,
                 Date() as NSDate
+            ),
+            key: "date",
+            ascending: true
+        )
+        return try await context.perform {
+            guard let fetchedResults = results as? [OverrideStored] else {
+                throw CoreDataError.fetchError(function: #function, file: #file)
+            }
+            return fetchedResults.map(\.objectID)
+        }
+    }
+
+    /// Scheduled Overrides whose start time has arrived or passed and which never activated.
+    ///
+    /// This is the catch-up query: it deliberately has no `date > now` bound, because the whole
+    /// point is to find Overrides that were missed while the app was not running. `isScheduled`
+    /// is what keeps a cancelled Override — identical in every other respect — out of the results.
+    func fetchDueScheduledOverrides(asOf date: Date) async throws -> [NSManagedObjectID] {
+        let results = try await CoreDataStack.shared.fetchEntitiesAsync(
+            ofType: OverrideStored.self,
+            onContext: context,
+            predicate: NSPredicate(
+                format: "isScheduled == %@ AND enabled == %@ AND isPreset == %@ AND date <= %@",
+                true as NSNumber,
+                false as NSNumber,
+                false as NSNumber,
+                date as NSDate
             ),
             key: "date",
             ascending: true
@@ -439,7 +471,8 @@ final class BaseOverrideStorage: @preconcurrency OverrideStorage, Injectable {
             ofType: OverrideStored.self,
             onContext: context,
             predicate: NSPredicate(
-                format: "enabled == %@ AND isPreset == %@ AND date >= %@ AND date <= %@",
+                format: "isScheduled == %@ AND enabled == %@ AND isPreset == %@ AND date >= %@ AND date <= %@",
+                true as NSNumber,
                 false as NSNumber,
                 false as NSNumber,
                 lower as NSDate,

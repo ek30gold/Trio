@@ -590,7 +590,8 @@ struct EditOverrideForm: View {
                                 start: start ?? 0,
                                 end: end ?? 0,
                                 smbMinutes: smbMinutes ?? state.defaultSmbMinutes,
-                                uamMinutes: uamMinutes ?? state.defaultUamMinutes
+                                uamMinutes: uamMinutes ?? state.defaultUamMinutes,
+                                isScheduled: true
                             )
                             try await state.overrideStorage.storeOverride(override: newOverride)
 

@@ -433,6 +433,7 @@ extension Adjustments.StateModel {
                 guard let override = try viewContext.existingObject(with: firstID) as? OverrideStored else { return }
                 override.enabled = true
                 override.date = Date()
+                override.isScheduled = false // it has started; no longer pending
                 override.isUploadedToNS = false
                 isOverrideEnabled = true
                 try viewContext.save()
@@ -446,7 +447,15 @@ extension Adjustments.StateModel {
     }
 
     func cancelScheduledOverride(_ objectID: NSManagedObjectID) async {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["scheduledOverrideActivation"])
+        // Remove only this Override's own notification. The identifier used to be a single shared
+        // constant, so cancelling one scheduled Override silently cancelled every other one's
+        // notification too (and scheduling a second replaced the first's).
+        if let override = try? viewContext.existingObject(with: objectID) as? OverrideStored,
+           let scheduledDate = override.date
+        {
+            UNUserNotificationCenter.current()
+                .removePendingNotificationRequests(withIdentifiers: [Self.activationNotificationID(for: scheduledDate)])
+        }
         scheduledOverrideTasks[objectID]?.cancel()
         scheduledOverrideTasks.removeValue(forKey: objectID)
         await overrideStorage.deleteOverridePreset(objectID)
@@ -475,6 +484,12 @@ extension Adjustments.StateModel {
         }
     }
 
+    /// Unique per scheduled start time, so multiple scheduled Overrides do not overwrite or cancel
+    /// each other's notifications.
+    static func activationNotificationID(for scheduledDate: Date) -> String {
+        "scheduledOverrideActivation-\(scheduledDate.timeIntervalSince1970)"
+    }
+
     private func sendScheduledOverrideActivationNotification(name: String, scheduledDate: Date) async {
         let content = UNMutableNotificationContent()
         content.title = String(localized: "Override Scheduled")
@@ -488,7 +503,7 @@ extension Adjustments.StateModel {
         let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
 
         let request = UNNotificationRequest(
-            identifier: "scheduledOverrideActivation",
+            identifier: Self.activationNotificationID(for: scheduledDate),
             content: content,
             trigger: trigger
         )
