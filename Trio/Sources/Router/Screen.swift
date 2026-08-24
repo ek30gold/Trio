@@ -167,8 +167,24 @@ extension Screen {
         case .settingsExport:
             SettingsExport.RootView(resolver: resolver)
         case .manageMealPresets:
-            ManageMealPresetsView(state: resolver.resolve(Treatments.StateModel.self)!)
+            ManageMealPresetsView(state: Screen.makeMealPresetsStateModel(resolver: resolver))
         }
+    }
+
+    /// Builds the state model for the standalone meal-preset screen reached from Settings.
+    ///
+    /// No `StateModel` is registered with the container, so resolving one here returned nil and the
+    /// screen trapped on open. Constructed directly instead, matching `.tidepoolConfig` above.
+    ///
+    /// `isActive` is deliberately left false: `Treatments.StateModel.subscribe()` starts
+    /// bolus-progress subscriptions and determination observers intended for the live bolus screen,
+    /// and a second live copy of those is not wanted for preset management. Only the preset list
+    /// this view actually renders is populated.
+    private static func makeMealPresetsStateModel(resolver: Resolver) -> Treatments.StateModel {
+        let state = Treatments.StateModel()
+        state.resolver = resolver
+        state.setupMealPresetsArray()
+        return state
     }
 
     func modal(resolver: Resolver) -> Main.Modal {

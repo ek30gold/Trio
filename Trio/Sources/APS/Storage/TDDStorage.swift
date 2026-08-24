@@ -265,7 +265,12 @@ final class BaseTDDStorage: TDDStorage, Injectable {
                 let durationMinutes = max(0, actualEnd.timeIntervalSince(actualStart) / 60)
                 if durationMinutes > 0, let rate = event.rate {
                     let durationHours = (Decimal(durationMinutes) / 60).truncated(toPlaces: 5)
-                    let insulin = Decimal(roundToSupportedBasalRate(Double(rate * durationHours)))
+                    // `rate * durationHours` is a quantity in units, not a rate. It used to be passed
+                // through `roundToSupportedBasalRate(unitsPerHour:)`, which rounds down to the
+                // pump's nearest supported *rate* — so a 5-minute segment (~1/12 h) floored toward
+                // zero and its insulin was dropped from the daily total. A TDD sum wants the true
+                // integral of rate over time, so no quantization belongs here.
+                let insulin = rate * durationHours
                     if insulin > 0 {
                         totalInsulin += insulin
 
@@ -330,7 +335,12 @@ final class BaseTDDStorage: TDDStorage, Injectable {
                 guard endTime > currentTime else { break }
 
                 let durationHours = (Decimal(endTime.timeIntervalSince(currentTime)) / 3600).truncated(toPlaces: 5)
-                let insulin = Decimal(roundToSupportedBasalRate(Double(rate * durationHours)))
+                // `rate * durationHours` is a quantity in units, not a rate. It used to be passed
+                // through `roundToSupportedBasalRate(unitsPerHour:)`, which rounds down to the
+                // pump's nearest supported *rate* — so a 5-minute segment (~1/12 h) floored toward
+                // zero and its insulin was dropped from the daily total. A TDD sum wants the true
+                // integral of rate over time, so no quantization belongs here.
+                let insulin = rate * durationHours
 
                 if insulin > 0 {
                     totalInsulin += insulin
@@ -497,7 +507,12 @@ final class BaseTDDStorage: TDDStorage, Injectable {
     //                let endTime = min(nextSwitchTime, gap.end)
     //                let durationHours = Decimal(endTime.timeIntervalSince(currentTime)) / 3600
     //
-    //                let insulin = Decimal(roundToSupportedBasalRate(Double(rate * durationHours)))
+    //                // `rate * durationHours` is a quantity in units, not a rate. It used to be passed
+                // through `roundToSupportedBasalRate(unitsPerHour:)`, which rounds down to the
+                // pump's nearest supported *rate* — so a 5-minute segment (~1/12 h) floored toward
+                // zero and its insulin was dropped from the daily total. A TDD sum wants the true
+                // integral of rate over time, so no quantization belongs here.
+                let insulin = rate * durationHours
     //                totalInsulin += insulin
     //
     //                debug(

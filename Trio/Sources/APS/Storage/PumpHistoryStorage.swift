@@ -274,8 +274,11 @@ final class BasePumpHistoryStorage: PumpHistoryStorage, Injectable {
             onContext: context,
             predicate: NSPredicate.pumpHistoryLast24h,
             key: "timestamp",
-            ascending: false,
-            fetchLimit: 288
+            ascending: false
+            // No fetch limit: this feeds TDD, which needs the whole 24h window. A 288 cap assumed
+            // one event per 5-minute loop, but SMBs, suspends, primes and site changes push a real
+            // day well past that — so the newest 288 rows covered only part of the day and TDD was
+            // understated, which in turn biases dynamic ISF.
         )
 
         return await context.perform {

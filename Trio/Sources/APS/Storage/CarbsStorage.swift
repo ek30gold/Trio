@@ -278,23 +278,34 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
     }
 
     private func saveCarbsToCoreData(entries: [CarbsEntry], areFetchedFromRemote: Bool) async {
-        guard let entry = entries.last else { return }
+        // Every entry gets a row. This previously stored `entries.last` only, so a poll that
+        // returned several new remote carb entries persisted just one of them and understated COB.
+        //
+        // `storeCarbs` appends a synthesized non-FPU twin for each fat/protein-only entry, and that
+        // twin would otherwise be written alongside its original as a duplicate. `CarbsEntry`
+        // defines equality by `createdAt`, which the twin shares with its original, so filtering on
+        // the type's own identity collapses the pair while keeping genuinely distinct meals.
+        var seen = Set<CarbsEntry>()
+        let uniqueEntries = entries.filter { seen.insert($0).inserted }
+        guard !uniqueEntries.isEmpty else { return }
 
         await context.perform {
-            let newItem = CarbEntryStored(context: self.context)
-            newItem.date = entry.actualDate ?? entry.createdAt
-            newItem.carbs = Double(truncating: NSDecimalNumber(decimal: entry.carbs))
-            newItem.fat = Double(truncating: NSDecimalNumber(decimal: entry.fat ?? 0))
-            newItem.protein = Double(truncating: NSDecimalNumber(decimal: entry.protein ?? 0))
-            newItem.note = entry.note
-            newItem.id = UUID()
-            newItem.isFPU = false
-            newItem.isUploadedToNS = areFetchedFromRemote ? true : false
-            newItem.isUploadedToHealth = false
-            newItem.isUploadedToTidepool = false
+            for entry in uniqueEntries {
+                let newItem = CarbEntryStored(context: self.context)
+                newItem.date = entry.actualDate ?? entry.createdAt
+                newItem.carbs = Double(truncating: NSDecimalNumber(decimal: entry.carbs))
+                newItem.fat = Double(truncating: NSDecimalNumber(decimal: entry.fat ?? 0))
+                newItem.protein = Double(truncating: NSDecimalNumber(decimal: entry.protein ?? 0))
+                newItem.note = entry.note
+                newItem.id = UUID()
+                newItem.isFPU = false
+                newItem.isUploadedToNS = areFetchedFromRemote ? true : false
+                newItem.isUploadedToHealth = false
+                newItem.isUploadedToTidepool = false
 
-            if entry.fat != nil, entry.protein != nil, let fpuId = entry.fpuID {
-                newItem.fpuID = UUID(uuidString: fpuId)
+                if entry.fat != nil, entry.protein != nil, let fpuId = entry.fpuID {
+                    newItem.fpuID = UUID(uuidString: fpuId)
+                }
             }
 
             do {

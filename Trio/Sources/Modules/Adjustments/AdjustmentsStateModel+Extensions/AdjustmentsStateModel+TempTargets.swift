@@ -181,6 +181,12 @@ extension Adjustments.StateModel {
                 debug(.default, "No Temp Target found for the specified date.")
                 return
             }
+            // Displace whatever is currently running before enabling this one, matching
+            // `saveCustomTempTarget` and `enactTempTargetPreset`. Without this, two rows were left
+            // `enabled == true`; the algorithm selects the newest `date` with a fetch limit of one,
+            // and because the scheduled row kept its original (older) start time it lost that
+            // comparison — so dosing silently ignored it while the UI showed it as active.
+            await disableAllActiveTempTargets(createTempTargetRunEntry: true)
             await setCurrentTempTarget(from: ids)
 
             try await MainActor.run {
@@ -194,6 +200,7 @@ extension Adjustments.StateModel {
 
                 tempTarget.enabled = true
                 tempTarget.isScheduled = false // it has started; no longer pending
+                tempTarget.date = Date() // start now, so it wins the newest-date selection
                 try viewContext.save()
                 isTempTargetEnabled = true
             }
@@ -209,7 +216,17 @@ extension Adjustments.StateModel {
 
     /// Cancels a scheduled Temp Target and removes it from storage.
     func cancelScheduledTempTarget(_ objectID: NSManagedObjectID) async {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["scheduledTempTargetActivation"])
+        // Remove only this Temp Target's own notification. The identifier used to be a single
+        // shared constant, so cancelling one scheduled Temp Target silently cancelled every other
+        // one's notification too (and scheduling a second replaced the first's).
+        if let tempTarget = try? viewContext.existingObject(with: objectID) as? TempTargetStored,
+           let scheduledDate = tempTarget.date
+        {
+            UNUserNotificationCenter.current()
+                .removePendingNotificationRequests(
+                    withIdentifiers: [Self.tempTargetActivationNotificationID(for: scheduledDate)]
+                )
+        }
         scheduledTempTargetTasks[objectID]?.cancel()
         scheduledTempTargetTasks.removeValue(forKey: objectID)
         await tempTargetStorage.deleteTempTargetPreset(objectID)
@@ -238,6 +255,12 @@ extension Adjustments.StateModel {
         }
     }
 
+    /// Unique per scheduled start time, so multiple scheduled Temp Targets do not overwrite or
+    /// cancel each other's notifications.
+    static func tempTargetActivationNotificationID(for scheduledDate: Date) -> String {
+        "scheduledTempTargetActivation-\(scheduledDate.timeIntervalSince1970)"
+    }
+
     /// Sends a local notification for a scheduled Temp Target activation.
     func sendScheduledTempTargetNotification(name: String, scheduledDate: Date) async {
         let content = UNMutableNotificationContent()
@@ -255,7 +278,7 @@ extension Adjustments.StateModel {
         )
         let trigger = UNCalendarNotificationTrigger(dateMatching: triggerDate, repeats: false)
         let request = UNNotificationRequest(
-            identifier: "scheduledTempTargetActivation",
+            identifier: Self.tempTargetActivationNotificationID(for: scheduledDate),
             content: content,
             trigger: trigger
         )

@@ -1,10 +1,17 @@
 import Foundation
 
 extension TrioRemoteControl {
-    func handleMealCommand(_ payload: CommandPayload) async throws {
+    /// Handles a remote meal command.
+    ///
+    /// - Returns: `true` if the meal was logged, `false` if it was rejected. The caller must not
+    /// deliver an attached bolus for a rejected meal — previously every rejection path returned
+    /// normally, so a meal refused for exceeding its limits still delivered its full meal bolus
+    /// with no carbs on board.
+    @discardableResult
+    func handleMealCommand(_ payload: CommandPayload) async throws -> Bool {
         guard payload.carbs != nil || payload.fat != nil || payload.protein != nil else {
             await logError("Command rejected: meal data is incomplete or invalid.", payload: payload)
-            return
+            return false
         }
 
         let carbsDecimal = payload.carbs != nil ? Decimal(payload.carbs!) : nil
@@ -21,18 +28,18 @@ extension TrioRemoteControl {
                 "Command rejected: carbs amount (\(carbs)g) exceeds the maximum allowed (\(maxCarbs)g).",
                 payload: payload
             )
-            return
+            return false
         }
         if let fat = fatDecimal, fat > maxFat {
             await logError("Command rejected: fat amount (\(fat)g) exceeds the maximum allowed (\(maxFat)g).", payload: payload)
-            return
+            return false
         }
         if let protein = proteinDecimal, protein > maxProtein {
             await logError(
                 "Command rejected: protein amount (\(protein)g) exceeds the maximum allowed (\(maxProtein)g).",
                 payload: payload
             )
-            return
+            return false
         }
 
         let payloadDate = Date(timeIntervalSince1970: payload.timestamp)
@@ -44,17 +51,20 @@ extension TrioRemoteControl {
             ), key: "date", ascending: false
         )
 
-        await taskContext.perform {
-            guard let recentCarbEntries = results as? [CarbEntryStored] else { return }
-            if !recentCarbEntries.isEmpty {
-                Task {
-                    await self.logError(
-                        "Command rejected: newer carb entries have been logged since the command was sent.",
-                        payload: payload
-                    )
-                    return
-                }
-            }
+        // Reject a replayed or duplicated command. The rejection used to be logged from inside a
+        // detached `Task`, whose `return` exited only that closure — so the command was logged as
+        // rejected and then stored anyway, doubling the carbs.
+        let hasNewerCarbEntries = await taskContext.perform {
+            guard let recentCarbEntries = results as? [CarbEntryStored] else { return false }
+            return !recentCarbEntries.isEmpty
+        }
+
+        if hasNewerCarbEntries {
+            await logError(
+                "Command rejected: newer carb entries have been logged since the command was sent.",
+                payload: payload
+            )
+            return false
         }
 
         let actualDate = payload.scheduledTime.map { Date(timeIntervalSince1970: $0) }
@@ -75,5 +85,7 @@ extension TrioRemoteControl {
                 customNotificationMessage: "Meal logged"
             )
         }
+
+        return true
     }
 }

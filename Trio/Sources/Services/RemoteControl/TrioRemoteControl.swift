@@ -79,8 +79,10 @@ class TrioRemoteControl: Injectable {
         case .cancelTempTarget:
             await cancelTempTarget(commandPayload)
         case .meal:
-            try await handleMealCommand(commandPayload)
-            if commandPayload.bolusAmount != nil {
+            // Only deliver the attached bolus if the meal itself was accepted. A rejected meal
+            // used to fall through to the bolus, delivering a full meal dose with no carbs logged.
+            let mealWasLogged = try await handleMealCommand(commandPayload)
+            if mealWasLogged, commandPayload.bolusAmount != nil {
                 try await handleBolusCommand(commandPayload)
             }
         case .startOverride:

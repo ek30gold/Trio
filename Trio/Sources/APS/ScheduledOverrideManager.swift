@@ -133,7 +133,7 @@ final class BaseScheduledOverrideManager: ScheduledOverrideManager, Injectable {
             let lateness = now.timeIntervalSince(scheduledStart)
 
             guard case let .activate(trimmed) = decision(for: override, now: now) else {
-                await drop(id, now: now, superseded: false)
+                await drop(id, now: now)
                 return
             }
 
