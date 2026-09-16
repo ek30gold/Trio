@@ -123,6 +123,14 @@ extension Treatments {
         var preprocessedData: [(id: UUID, forecast: Forecast, forecastValue: ForecastValue)] = []
         var predictionsForChart: Predictions?
         var simulatedDetermination: Determination?
+        /// Monotonic token identifying the most recent `updateForecasts` run. `updateForecasts` is
+        /// called from several unsynchronized places — the Core Data determination sink and three
+        /// View `.onChange` handlers (carbs debounce, bolus amount, date picker) — and a simulation
+        /// run takes long enough that they overlap in practice. Each run claims the next value on
+        /// entry and re-checks it after every `await`; a run that finds the token has moved on has
+        /// been superseded by a newer call and must discard its results instead of publishing them,
+        /// so a slow simulation can never overwrite a newer one's determination or forecast arrays.
+        @MainActor private var forecastGeneration: UInt64 = 0
 
         var minForecast: [Int] = []
         var maxForecast: [Int] = []
@@ -917,6 +925,9 @@ extension Treatments.StateModel {
             uam: forecastsSet.extractValues(for: "uam")
         )
 
+        // Carry the stored determination's real IOB/COB rather than zeros: this object is assigned
+        // to `simulatedDetermination`, which feeds both the Treatments view's on-board pills and the
+        // backdated-entry COB that `calculateInsulin()` reads via `bolusCalculationManager`.
         return Determination(
             id: UUID(),
             reason: "",
@@ -925,8 +936,8 @@ extension Treatments.StateModel {
             sensitivityRatio: 0,
             rate: 0,
             duration: 0,
-            iob: 0,
-            cob: 0,
+            iob: (determinationObject.iob ?? 0) as Decimal,
+            cob: Decimal(determinationObject.cob),
             predictions: predictions.isEmpty ? nil : predictions,
             carbsReq: 0,
             temp: nil,
@@ -945,7 +956,26 @@ extension Treatments.StateModel {
         }
 
         debug(.bolusState, "updateForecasts fired")
-        if let forecastData = forecastData {
+
+        // Claim a generation for this run before doing anything else, so any other in-flight or
+        // future run can tell it has been superseded.
+        forecastGeneration &+= 1
+        let generation = forecastGeneration
+
+        // A caller-supplied `forecastData` (from the Core Data sink, via `mapForecastsFromController`)
+        // describes the last stored loop result and knows nothing about the entry the user is
+        // currently composing. Accepting it while an entry is pending would drop that entry from the
+        // on-board pills and, for a backdated entry, from the bolus recommendation:
+        // `BolusCalculationManager` zeroes the typed carbs for backdated entries and takes COB
+        // entirely from `simulatedDetermination`, so a mapped determination would silently
+        // under-count the meal. Re-simulate instead whenever carbs or a bolus amount are pending, so
+        // what is displayed and what is recommended both stay consistent with what is on screen.
+        //
+        // Fat and protein are deliberately not considered pending input here: FPU carb-equivalents
+        // are delivered hours later and `simulateDetermineBasal` takes no FPU parameter.
+        let hasPendingEntry = carbs > 0 || amount > 0
+
+        if let forecastData = forecastData, !hasPendingEntry {
             simulatedDetermination = forecastData
             debugPrint("\(DebuggingIdentifiers.failed) minPredBG: \(minPredBG)")
         } else {
@@ -958,8 +988,12 @@ extension Treatments.StateModel {
                 )
             }.value
 
-            // Stale minPredBG/cob from a superseded run would feed the next bolus calculation.
-            guard !Task.isCancelled else { return }
+            // A newer call (from the Core Data sink or another View `.onChange`) may have started
+            // and even finished while this simulation was awaiting; if so this run is stale and must
+            // not overwrite what that newer run already published.
+            guard generation == forecastGeneration else {
+                return debug(.bolusState, "discarding superseded forecast simulation")
+            }
             simulatedDetermination = simulated
 
             // Update evBG and minPredBG from simulated determination
@@ -1005,7 +1039,9 @@ extension Treatments.StateModel {
         let minResult = await minForecastResult
         let maxResult = await maxForecastResult
 
-        guard !Task.isCancelled else { return }
+        guard generation == forecastGeneration else {
+            return debug(.bolusState, "discarding superseded forecast bounds")
+        }
 
         minForecast = minResult
         maxForecast = maxResult
