@@ -1,0 +1,1331 @@
+diff --git a/Trio.xcodeproj/project.pbxproj b/Trio.xcodeproj/project.pbxproj
+index 2cf98cfc9..0d08eb9ca 100644
+--- a/Trio.xcodeproj/project.pbxproj
++++ b/Trio.xcodeproj/project.pbxproj
+@@ -70,6 +70,8 @@
+ 		3811DE3125C9D49500A708ED /* HomeProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE2925C9D49500A708ED /* HomeProvider.swift */; };
+ 		3811DE3225C9D49500A708ED /* HomeDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE2A25C9D49500A708ED /* HomeDataFlow.swift */; };
+ 		3811DE3525C9D49500A708ED /* HomeRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE2E25C9D49500A708ED /* HomeRootView.swift */; };
++		16D6DA4AB6414267843A725A /* HomeRootView+Modern.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D8183128D008D098C665DD0 /* HomeRootView+Modern.swift */; };
++		3E2BE41886B15B569605B0DF /* ModernHomeComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 863E1ED64C2CAEB16338967C /* ModernHomeComponents.swift */; };
+ 		3811DE3F25C9D4A100A708ED /* SettingsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE3925C9D4A100A708ED /* SettingsStateModel.swift */; };
+ 		3811DE4125C9D4A100A708ED /* SettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE3C25C9D4A100A708ED /* SettingsRootView.swift */; };
+ 		3811DE4225C9D4A100A708ED /* SettingsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DE3D25C9D4A100A708ED /* SettingsDataFlow.swift */; };
+@@ -617,6 +619,7 @@
+ 		DD6A4E842DBEDD39008C4B26 /* AlgorithmSettingsImportantNotesStepView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD6A4E832DBEDD39008C4B26 /* AlgorithmSettingsImportantNotesStepView.swift */; };
+ 		DD6B7CB22C7B6F0800B75029 /* Rounding.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD6B7CB12C7B6F0800B75029 /* Rounding.swift */; };
+ 		DD6B7CB42C7B71F700B75029 /* ForecastDisplayType.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD6B7CB32C7B71F700B75029 /* ForecastDisplayType.swift */; };
++		4CB7BE33808D3AA9FBA0BC5C /* HomeLayoutStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB40B68DA6EDC136E8900318 /* HomeLayoutStyle.swift */; };
+ 		DD6D67E42C9C253500660C9B /* ColorSchemeOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD6D67E32C9C253500660C9B /* ColorSchemeOption.swift */; };
+ 		DD6F63CC2D27F615007D94CF /* TreatmentMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD6F63CB2D27F606007D94CF /* TreatmentMenuView.swift */; };
+ 		DD73FA0F2D74F58E00D19D1E /* BackgroundTask+Helper.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD73FA0E2D74F57300D19D1E /* BackgroundTask+Helper.swift */; };
+@@ -949,6 +952,8 @@
+ 		3811DE2925C9D49500A708ED /* HomeProvider.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HomeProvider.swift; sourceTree = "<group>"; };
+ 		3811DE2A25C9D49500A708ED /* HomeDataFlow.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HomeDataFlow.swift; sourceTree = "<group>"; };
+ 		3811DE2E25C9D49500A708ED /* HomeRootView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HomeRootView.swift; sourceTree = "<group>"; };
++		8D8183128D008D098C665DD0 /* HomeRootView+Modern.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeRootView+Modern.swift"; sourceTree = "<group>"; };
++		863E1ED64C2CAEB16338967C /* ModernHomeComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModernHomeComponents.swift; sourceTree = "<group>"; };
+ 		3811DE3925C9D4A100A708ED /* SettingsStateModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SettingsStateModel.swift; sourceTree = "<group>"; };
+ 		3811DE3C25C9D4A100A708ED /* SettingsRootView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SettingsRootView.swift; sourceTree = "<group>"; };
+ 		3811DE3D25C9D4A100A708ED /* SettingsDataFlow.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SettingsDataFlow.swift; sourceTree = "<group>"; };
+@@ -1488,6 +1493,7 @@
+ 		DD6A4E832DBEDD39008C4B26 /* AlgorithmSettingsImportantNotesStepView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlgorithmSettingsImportantNotesStepView.swift; sourceTree = "<group>"; };
+ 		DD6B7CB12C7B6F0800B75029 /* Rounding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rounding.swift; sourceTree = "<group>"; };
+ 		DD6B7CB32C7B71F700B75029 /* ForecastDisplayType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForecastDisplayType.swift; sourceTree = "<group>"; };
++		EB40B68DA6EDC136E8900318 /* HomeLayoutStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeLayoutStyle.swift; sourceTree = "<group>"; };
+ 		DD6D67E32C9C253500660C9B /* ColorSchemeOption.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorSchemeOption.swift; sourceTree = "<group>"; };
+ 		DD6F63CB2D27F606007D94CF /* TreatmentMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TreatmentMenuView.swift; sourceTree = "<group>"; };
+ 		DD73FA0E2D74F57300D19D1E /* BackgroundTask+Helper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BackgroundTask+Helper.swift"; sourceTree = "<group>"; };
+@@ -2104,6 +2110,8 @@
+ 			isa = PBXGroup;
+ 			children = (
+ 				3811DE2E25C9D49500A708ED /* HomeRootView.swift */,
++				8D8183128D008D098C665DD0 /* HomeRootView+Modern.swift */,
++				863E1ED64C2CAEB16338967C /* ModernHomeComponents.swift */,
+ 				3833B51E260264AC003021B3 /* Chart */,
+ 				3833B51F260264B6003021B3 /* Header */,
+ 			);
+@@ -2512,6 +2520,7 @@
+ 				DD4FFF322D458EE600B6CFF9 /* GarminWatchState.swift */,
+ 				DD940BA92CA7585D000830A5 /* GlucoseColorScheme.swift */,
+ 				715120D12D3C2B84005D9FB6 /* GlucoseNotificationsOption.swift */,
++				EB40B68DA6EDC136E8900318 /* HomeLayoutStyle.swift */,
+ 				E0D4F80427513ECF00BDF1FE /* HealthKitSample.swift */,
+ 				1967DFBD29D052C200759F30 /* Icons.swift */,
+ 				382C133625F13A1E00715CE1 /* InsulinSensitivities.swift */,
+@@ -4565,6 +4574,8 @@
+ 				3871F39F25ED895A0013ECB5 /* Decimal+Extensions.swift in Sources */,
+ 				CEE9A6592BBB418300EB5194 /* CalibrationsDataFlow.swift in Sources */,
+ 				3811DE3525C9D49500A708ED /* HomeRootView.swift in Sources */,
++				16D6DA4AB6414267843A725A /* HomeRootView+Modern.swift in Sources */,
++				3E2BE41886B15B569605B0DF /* ModernHomeComponents.swift in Sources */,
+ 				38E98A2925F52C9300C0CED0 /* Error+Extensions.swift in Sources */,
+ 				3E62C7822F54CC1B00433237 /* BolusDisplayThreshold.swift in Sources */,
+ 				38EA05DA261F6E7C0064E39B /* SimpleLogReporter.swift in Sources */,
+@@ -4787,6 +4798,7 @@
+ 				CE7CA3542A064973004BE681 /* TempPresetsIntentRequest.swift in Sources */,
+ 				58A3D5442C96DE11003F90FC /* TempTargetStored+Helper.swift in Sources */,
+ 				DD6B7CB42C7B71F700B75029 /* ForecastDisplayType.swift in Sources */,
++				4CB7BE33808D3AA9FBA0BC5C /* HomeLayoutStyle.swift in Sources */,
+ 				BD47FD172D88AAF50043966B /* CompletedStepView.swift in Sources */,
+ 				DD4AFFF12DADB59100AB7387 /* AlgorithmSettingsContentsStepView.swift in Sources */,
+ 				DDEBB05C2D89E9050032305D /* TimeInRangeType.swift in Sources */,
+diff --git a/Trio/Sources/Models/HomeLayoutStyle.swift b/Trio/Sources/Models/HomeLayoutStyle.swift
+new file mode 100644
+index 000000000..4e6fa367b
+--- /dev/null
++++ b/Trio/Sources/Models/HomeLayoutStyle.swift
+@@ -0,0 +1,16 @@
++import Foundation
++
++enum HomeLayoutStyle: String, JSON, CaseIterable, Identifiable, Codable, Hashable {
++    var id: String { rawValue }
++    case classic
++    case modern
++    var displayName: String {
++        switch self {
++        case .classic:
++            return String(localized: "Classic", comment: "Home screen layout option")
++
++        case .modern:
++            return String(localized: "Modern", comment: "Home screen layout option")
++        }
++    }
++}
+diff --git a/Trio/Sources/Models/TrioSettings.swift b/Trio/Sources/Models/TrioSettings.swift
+index 914aac2a8..723cc2c4a 100644
+--- a/Trio/Sources/Models/TrioSettings.swift
++++ b/Trio/Sources/Models/TrioSettings.swift
+@@ -76,6 +76,7 @@ struct TrioSettings: JSON, Equatable, Encodable {
+     var bolusShortcut: BolusShortcutLimit = .notAllowed
+     var timeInRangeType: TimeInRangeType = .timeInTightRange
+     var requireAdjustmentsConfirmation: Bool = false
++    var homeLayoutStyle: HomeLayoutStyle = .classic
+ 
+     /// Selected Garmin watchface (Trio or SwissAlpine)
+     var garminWatchface: GarminWatchface = .trio
+@@ -363,6 +364,10 @@ extension TrioSettings: Decodable {
+             settings.requireAdjustmentsConfirmation = requireAdjustmentsConfirmation
+         }
+ 
++        if let homeLayoutStyle = try? container.decode(HomeLayoutStyle.self, forKey: .homeLayoutStyle) {
++            settings.homeLayoutStyle = homeLayoutStyle
++        }
++
+         if let garminWatchface = try? container.decode(GarminWatchface.self, forKey: .garminWatchface) {
+             settings.garminWatchface = garminWatchface
+         }
+diff --git a/Trio/Sources/Modules/Home/HomeStateModel.swift b/Trio/Sources/Modules/Home/HomeStateModel.swift
+index bc73eb599..8667713c9 100644
+--- a/Trio/Sources/Modules/Home/HomeStateModel.swift
++++ b/Trio/Sources/Modules/Home/HomeStateModel.swift
+@@ -73,6 +73,7 @@ extension Home {
+         var highGlucose: Decimal = 180
+         var currentGlucoseTarget: Decimal = 100
+         var glucoseColorScheme: GlucoseColorScheme = .staticColor
++        var homeLayoutStyle: HomeLayoutStyle = .classic
+         var eA1cDisplayUnit: EstimatedA1cDisplayUnit = .percent
+         var displayXgridLines: Bool = false
+         var displayYgridLines: Bool = false
+@@ -408,6 +409,7 @@ extension Home {
+             manualTempBasal = apsManager.isManualTempBasal
+             isSmoothingEnabled = settingsManager.settings.smoothGlucose
+             glucoseColorScheme = settingsManager.settings.glucoseColorScheme
++            homeLayoutStyle = settingsManager.settings.homeLayoutStyle
+             autosensMax = settingsManager.preferences.autosensMax
+             lowGlucose = settingsManager.settings.low
+             highGlucose = settingsManager.settings.high
+@@ -676,6 +678,7 @@ extension Home.StateModel:
+         }
+         eA1cDisplayUnit = settingsManager.settings.eA1cDisplayUnit
+         glucoseColorScheme = settingsManager.settings.glucoseColorScheme
++        homeLayoutStyle = settingsManager.settings.homeLayoutStyle
+         displayXgridLines = settingsManager.settings.xGridLines
+         displayYgridLines = settingsManager.settings.yGridLines
+         thresholdLines = settingsManager.settings.rulerMarks
+diff --git a/Trio/Sources/Modules/Home/View/Header/PumpView.swift b/Trio/Sources/Modules/Home/View/Header/PumpView.swift
+index c28e1511a..494811619 100644
+--- a/Trio/Sources/Modules/Home/View/Header/PumpView.swift
++++ b/Trio/Sources/Modules/Home/View/Header/PumpView.swift
+@@ -11,7 +11,7 @@ struct PumpView: View {
+     let battery: [OpenAPS_Battery]
+     @Environment(\.colorScheme) var colorScheme
+ 
+-    let NORMAL_PATCH_AGE = TimeInterval.hours(80)
++    let NORMAL_PATCH_AGE = PumpDisplayFormatting.normalPatchAge
+ 
+     private var batteryFormatter: NumberFormatter {
+         let formatter = NumberFormatter()
+@@ -20,21 +20,11 @@ struct PumpView: View {
+     }
+ 
+     private var hourglassIcon: String {
+-        if activatedAtDate != nil { return "hourglass.badge.plus" }
+-        guard let expiration = expiresAtDate else { return "hourglass" }
+-
+-        let hoursRemaining = expiration.timeIntervalSince(timerDate) / 3600
+-
+-        switch hoursRemaining {
+-        case 60 ... 72:
+-            return "hourglass.bottomhalf.filled"
+-        case 12 ..< 60:
+-            return "hourglass"
+-        case -8 ..< 12:
+-            return "hourglass.tophalf.filled"
+-        default:
+-            return "hourglass"
+-        }
++        PumpDisplayFormatting.hourglassIcon(
++            expiresAtDate: expiresAtDate,
++            activatedAtDate: activatedAtDate,
++            timerDate: timerDate
++        )
+     }
+ 
+     var body: some View {
+@@ -133,6 +123,59 @@ struct PumpView: View {
+     }
+ 
+     private func remainingTimeString(time: TimeInterval) -> String {
++        PumpDisplayFormatting.remainingTimeString(time: time)
++    }
++
++    private var batteryColor: Color {
++        PumpDisplayFormatting.batteryColor(percent: battery.first?.percent)
++    }
++
++    private var reservoirColor: Color {
++        PumpDisplayFormatting.reservoirColor(for: reservoir)
++    }
++
++    private var timerColor: Color {
++        PumpDisplayFormatting.timerColor(
++            expiresAtDate: expiresAtDate,
++            activatedAtDate: activatedAtDate,
++            timerDate: timerDate
++        )
++    }
++
++    private var timerColorSecondary: Color {
++        PumpDisplayFormatting.timerColorSecondary(activatedAtDate: activatedAtDate)
++    }
++}
++
++// MARK: - Shared pump display formatting
++
++/// Icon, colour and duration formatting for pump status readouts.
++///
++/// Extracted from `PumpView` so the Classic and Modern home layouts render pump state identically —
++/// a threshold changed here changes both, rather than the two drifting apart.
++enum PumpDisplayFormatting {
++    /// Age at which a pod with a known activation date is considered old enough to warn about.
++    static let normalPatchAge = TimeInterval.hours(80)
++
++    static func hourglassIcon(expiresAtDate: Date?, activatedAtDate: Date?, timerDate: Date) -> String {
++        if activatedAtDate != nil { return "hourglass.badge.plus" }
++        guard let expiration = expiresAtDate else { return "hourglass" }
++
++        let hoursRemaining = expiration.timeIntervalSince(timerDate) / 3600
++
++        switch hoursRemaining {
++        case 60 ... 72:
++            return "hourglass.bottomhalf.filled"
++        case 12 ..< 60:
++            return "hourglass"
++        case -8 ..< 12:
++            return "hourglass.tophalf.filled"
++        default:
++            return "hourglass"
++        }
++    }
++
++    static func remainingTimeString(time: TimeInterval) -> String {
+         guard time > 0 else {
+             return String(localized: "Replace pod", comment: "View/Header when pod expired")
+         }
+@@ -161,12 +204,12 @@ struct PumpView: View {
+         return "\(minutes)" + String(localized: "m", comment: "abbreviation for minutes")
+     }
+ 
+-    private var batteryColor: Color {
+-        guard let battery = battery.first else {
++    static func batteryColor(percent: Double?) -> Color {
++        guard let percent = percent else {
+             return .gray
+         }
+ 
+-        switch battery.percent {
++        switch percent {
+         case ...10:
+             return Color.loopRed
+         case ...20:
+@@ -176,7 +219,7 @@ struct PumpView: View {
+         }
+     }
+ 
+-    private var reservoirColor: Color {
++    static func reservoirColor(for reservoir: Decimal?) -> Color {
+         guard let reservoir = reservoir else {
+             return .gray
+         }
+@@ -191,9 +234,13 @@ struct PumpView: View {
+         }
+     }
+ 
+-    private var timerColor: Color {
++    static func timerColor(
++        expiresAtDate: Date?,
++        activatedAtDate: Date?,
++        timerDate: Date
++    ) -> Color {
+         if let activatedAt = activatedAtDate {
+-            return abs(activatedAt.timeIntervalSinceNow) > NORMAL_PATCH_AGE ? Color.yellow : Color.loopGreen
++            return abs(activatedAt.timeIntervalSinceNow) > normalPatchAge ? Color.yellow : Color.loopGreen
+         }
+ 
+         guard let expiresAt = expiresAtDate else {
+@@ -212,7 +259,7 @@ struct PumpView: View {
+         }
+     }
+ 
+-    private var timerColorSecondary: Color {
++    static func timerColorSecondary(activatedAtDate: Date?) -> Color {
+         if activatedAtDate != nil {
+             return Color.gray
+         }
+diff --git a/Trio/Sources/Modules/Home/View/HomeRootView+Modern.swift b/Trio/Sources/Modules/Home/View/HomeRootView+Modern.swift
+new file mode 100644
+index 000000000..77fe28e8d
+--- /dev/null
++++ b/Trio/Sources/Modules/Home/View/HomeRootView+Modern.swift
+@@ -0,0 +1,652 @@
++import CoreData
++import SwiftUI
++
++/// The Modern home layout.
++///
++/// A card-based restyle of the Main tab, selectable via
++/// Settings → Features → User Interface → Home Screen Design. Every readout, tap target, gesture and
++/// piece of state here is the same as the Classic layout's — this file changes presentation only.
++extension Home.RootView {
++    // MARK: - Layout constants
++
++    /// Horizontal inset for the cards. The chart card deliberately uses a much smaller inset (see
++    /// `modernChartCard`) because `MainChartView` sizes its pinned Y-axis off the full screen width.
++    private var modernCardInset: CGFloat { 12 }
++
++    /// Whether the layout is running on one of the shortest supported screens (4.7" iPhone SE and
++    /// below).
++    ///
++    /// The Modern layout stacks strictly more chrome than Classic — three padded cards where Classic
++    /// has a bobble and a single text row — so on a short screen each card has to give up a few points
++    /// of padding for the chart to keep Classic's height. Uses the same screen-height threshold as
++    /// `UIDevice.adjustPadding`, which handles the padding values themselves.
++    private var modernIsCompactHeight: Bool {
++        UIScreen.screenHeight <= UIDevice.DeviceSize.smallDevice.rawValue
++    }
++
++    // MARK: - Root
++
++    @ViewBuilder func modernViewElements(_ geo: GeometryProxy) -> some View {
++        VStack(spacing: 0) {
++            if let apsManager = state.apsManager, let bluetoothManager = apsManager.bluetoothManager,
++               bluetoothManager.bluetoothAuthorization != .authorized
++            {
++                BluetoothRequiredView()
++                    .padding(.top, 10)
++            } else {
++                modernGlucoseCard(geo)
++                    .padding(.horizontal, modernCardInset)
++                    .padding(.top, UIDevice.adjustPadding(min: 6, max: 10))
++
++                modernDeviceChipsRow
++                    .padding(.horizontal, modernCardInset)
++                    .padding(.top, UIDevice.adjustPadding(min: 3, max: 6))
++            }
++
++            modernStatChipsRow
++                .padding(.horizontal, modernCardInset)
++                .padding(.top, UIDevice.adjustPadding(min: 3, max: 6))
++
++            modernChartCard(geo)
++                .padding(.horizontal, 4)
++                .padding(.top, UIDevice.adjustPadding(min: 3, max: 6))
++
++            modernControlsRow
++                .padding(.horizontal, modernCardInset)
++                .padding(.vertical, UIDevice.adjustPadding(min: 2, max: 6))
++
++            if let progress = state.bolusProgress {
++                bolusView(geo: geo, progress)
++                    // `min: 0` rather than `min: nil`: `adjustPadding` returns its `min` verbatim on
++                    // short screens, and `padding(_:_:)` reads a nil length as the *system default*
++                    // (~16pt), not as zero — so `min: nil` would silently add padding on exactly the
++                    // device where the vertical budget is tightest.
++                    .padding(.bottom, UIDevice.adjustPadding(min: 0, max: 20))
++            } else {
++                modernAdjustmentCard(geo)
++                    .padding(.horizontal, modernCardInset)
++                    .padding(.bottom, UIDevice.adjustPadding(min: 0, max: 20))
++            }
++        }
++        .safeAreaInset(edge: .top, spacing: 0) {
++            if notificationsDisabled {
++                alertSafetyNotificationsView(geo: geo)
++            }
++            if let badgeImage = state.pumpStatusBadgeImage, let badgeColor = state.pumpStatusBadgeColor {
++                pumpTimezoneView(badgeImage, badgeColor)
++                    .padding(.horizontal, 20)
++            }
++        }
++        .background(appState.trioBackgroundColor(for: colorScheme))
++        .onReceive(
++            resolver.resolve(AlertPermissionsChecker.self)!.$notificationsDisabled,
++            perform: {
++                if notificationsDisabled != $0 {
++                    notificationsDisabled = $0
++                    if notificationsDisabled {
++                        debug(.default, "notificationsDisabled")
++                    }
++                }
++            }
++        )
++    }
++
++    // MARK: - Glucose card
++
++    /// Colour of the current reading.
++    ///
++    /// Uses the same `Trio.getDynamicGlucoseColor` call as `CurrentGlucoseView`, including its
++    /// hardcoded 55/220 substitution under the dynamic colour scheme. It differs from Classic in one
++    /// respect: Classic leaves in-range readings `.primary` and only colours out-of-range ones,
++    /// whereas Modern colours every reading so the number always agrees with the range rail beneath it.
++    private var modernGlucoseColor: Color {
++        guard let glucoseValue = state.latestTwoGlucoseValues.last?.glucose else { return .secondary }
++
++        let value = Decimal(glucoseValue)
++        let hardCodedLow = Decimal(55)
++        let hardCodedHigh = Decimal(220)
++        let isDynamicColorScheme = state.glucoseColorScheme == .dynamicColor
++
++        return Trio.getDynamicGlucoseColor(
++            glucoseValue: value,
++            highGlucoseColorValue: isDynamicColorScheme ? hardCodedHigh : state.highGlucose,
++            lowGlucoseColorValue: isDynamicColorScheme ? hardCodedLow : state.lowGlucose,
++            targetGlucose: state.currentGlucoseTarget,
++            glucoseColorScheme: state.glucoseColorScheme
++        )
++    }
++
++    /// Signed delta between the last two readings. Mirrors `CurrentGlucoseView.delta`, minus that
++    /// view's leading whitespace padding, which the chip's own padding replaces here.
++    private var modernDeltaString: String {
++        let glucose = state.latestTwoGlucoseValues
++        guard glucose.count >= 2 else { return "--" }
++
++        var lastGlucose = Decimal(glucose.last?.glucose ?? 0)
++        var secondLastGlucose = Decimal(glucose.first?.glucose ?? 0)
++        if state.units == .mmolL {
++            lastGlucose = lastGlucose.asMmolL
++            secondLastGlucose = secondLastGlucose.asMmolL
++        }
++
++        let delta = lastGlucose - secondLastGlucose
++
++        let formatter = NumberFormatter()
++        formatter.numberStyle = .decimal
++        if state.units == .mmolL {
++            formatter.maximumFractionDigits = 1
++            formatter.minimumFractionDigits = 1
++            formatter.roundingMode = .halfUp
++        } else {
++            formatter.maximumFractionDigits = 0
++        }
++        formatter.positivePrefix = "+"
++        formatter.negativePrefix = "-"
++
++        return formatter.string(from: delta as NSNumber) ?? "--"
++    }
++
++    @ViewBuilder func modernGlucoseCard(_ geo: GeometryProxy) -> some View {
++        // Scales with available height so the card does not crowd out the chart on smaller devices.
++        // The 44pt ceiling keeps this card's three stacked rows within roughly the same vertical
++        // budget as Classic's 130pt glucose bobble, so the chart below can keep Classic's height.
++        // It is still comfortably larger than the 40pt `CurrentGlucoseView` uses.
++        let glucoseFontSize = min(max(geo.size.height * 0.07, 34), 44)
++        let glucoseColor = modernGlucoseColor
++        let cardSpacing: CGFloat = modernIsCompactHeight ? 6 : 8
++
++        ModernCard(cornerRadius: 22) {
++            VStack(alignment: .leading, spacing: cardSpacing) {
++                if state.cgmAvailable {
++                    HStack(alignment: .top) {
++                        HStack(alignment: .firstTextBaseline, spacing: 6) {
++                            if let glucoseValue = state.latestTwoGlucoseValues.last?.glucose {
++                                let displayGlucose = state.units == .mgdL
++                                    ? Decimal(glucoseValue).description
++                                    : Decimal(glucoseValue).formattedAsMmolL
++
++                                Text(glucoseValue == 400 ? "HIGH" : displayGlucose)
++                                    .font(.system(size: glucoseFontSize, weight: .bold, design: .rounded))
++                                    .foregroundStyle(glucoseColor)
++                                    .lineLimit(1)
++                                    .minimumScaleFactor(0.5)
++
++                                Image(systemName: "arrow.right")
++                                    .font(.system(size: glucoseFontSize * 0.42, weight: .bold))
++                                    .foregroundStyle(glucoseColor)
++                                    .rotationEffect(
++                                        .degrees(
++                                            state.latestTwoGlucoseValues.last?.directionEnum?
++                                                .modernTrendRotation ?? 0
++                                        )
++                                    )
++                                    .animation(.default, value: state.latestTwoGlucoseValues.last?.directionEnum)
++                            } else {
++                                Text("--")
++                                    .font(.system(size: glucoseFontSize, weight: .bold, design: .rounded))
++                                    .foregroundStyle(.secondary)
++                            }
++                        }
++
++                        Spacer()
++
++                        VStack(alignment: .trailing, spacing: 3) {
++                            Text(modernDeltaString + " " + state.units.rawValue)
++                                .font(.caption)
++                                .fontWeight(.semibold)
++                                .fontDesign(.rounded)
++                                .foregroundStyle(glucoseColor)
++                                .padding(.vertical, 3)
++                                .padding(.horizontal, 9)
++                                .background(
++                                    Capsule().fill(glucoseColor.opacity(0.12))
++                                )
++
++                            Text(TimeAgoFormatter.minutesAgo(from: state.latestTwoGlucoseValues.last?.date))
++                                .font(.caption2)
++                                .foregroundStyle(.secondary)
++                        }
++                    }
++
++                    GlucoseRangeRail(
++                        glucoseValue: state.latestTwoGlucoseValues.last.map { Decimal($0.glucose) },
++                        units: state.units,
++                        lowGlucose: state.lowGlucose,
++                        highGlucose: state.highGlucose,
++                        currentGlucoseTarget: state.currentGlucoseTarget,
++                        glucoseColorScheme: state.glucoseColorScheme
++                    )
++                } else {
++                    HStack(spacing: 8) {
++                        Image(systemName: "sensor.tag.radiowaves.forward.fill")
++                            .font(.body)
++                            .imageScale(.large)
++                        Text("Add CGM").font(.caption).bold()
++                        Spacer()
++                    }
++                    .frame(maxWidth: .infinity, alignment: .leading)
++                }
++
++                modernStatusPills
++            }
++            .padding(.horizontal, 16)
++            .padding(.top, modernIsCompactHeight ? 10 : 12)
++            .padding(.bottom, modernIsCompactHeight ? 8 : 10)
++        }
++        .contentShape(Rectangle())
++        .onTapGesture {
++            if !state.cgmAvailable {
++                showCGMSelection.toggle()
++            } else {
++                state.shouldDisplayCGMSetupSheet.toggle()
++            }
++        }
++        .onLongPressGesture {
++            let impactHeavy = UIImpactFeedbackGenerator(style: .heavy)
++            impactHeavy.impactOccurred()
++            state.showModal(for: .snooze)
++        }
++    }
++
++    /// Loop status and eventual BG. `LoopView` is embedded directly rather than reimplemented, so its
++    /// colour thresholds, "looping" spinner and manual/open-loop states all carry over unchanged.
++    @ViewBuilder private var modernStatusPills: some View {
++        HStack(spacing: 8) {
++            LoopView(
++                closedLoop: state.closedLoop,
++                timerDate: state.timerDate,
++                isLooping: state.isLooping,
++                lastLoopDate: state.lastLoopDate,
++                manualTempBasal: state.manualTempBasal,
++                determination: state.determinationsFromPersistence
++            )
++            .onTapGesture {
++                state.isLoopStatusPresented = true
++            }
++            .onLongPressGesture {
++                let impactHeavy = UIImpactFeedbackGenerator(style: .heavy)
++                impactHeavy.impactOccurred()
++                state.runLoop()
++            }
++
++            // `LoopView` draws its capsule from `.callout` text plus 5/10 padding and a 2pt stroke.
++            // This pill repeats that recipe exactly — same font, padding and stroke — so the two
++            // capsules resolve to the same height instead of the eventual-BG one sitting short, and
++            // they keep matching as Dynamic Type scales both fonts together.
++            HStack(alignment: .center, spacing: 4) {
++                Image(systemName: "arrow.right.circle")
++                    .font(.callout)
++                    .fontWeight(.bold)
++
++                if let eventualBG = state.enactedAndNonEnactedDeterminations.first?.eventualBG {
++                    let eventualGlucose = eventualBG as Decimal
++                    Text(state.units == .mgdL ? eventualGlucose.description : eventualGlucose.formattedAsMmolL)
++                        .font(.callout)
++                        .fontWeight(.bold)
++                        .fontDesign(.rounded)
++                } else {
++                    Text("--")
++                        .font(.callout)
++                        .fontWeight(.bold)
++                        .fontDesign(.rounded)
++                }
++            }
++            .foregroundStyle(.secondary)
++            .padding(.vertical, 5)
++            .padding(.horizontal, 10)
++            .overlay(
++                Capsule().stroke(Color.secondary.opacity(0.4), lineWidth: 2)
++            )
++
++            Spacer()
++        }
++    }
++
++    // MARK: - Device chips
++
++    @ViewBuilder var modernDeviceChipsRow: some View {
++        if let pumpStatusHighlightMessage = state.pumpStatusHighlightMessage {
++            ModernCard(cornerRadius: 15) {
++                Text(pumpStatusHighlightMessage)
++                    .font(.footnote)
++                    .fontWeight(.bold)
++                    .multilineTextAlignment(.center)
++                    .frame(maxWidth: .infinity)
++                    .padding(.vertical, 8)
++                    .padding(.horizontal, 10)
++            }
++            .contentShape(Rectangle())
++            .onTapGesture { modernPumpTapAction() }
++        } else if state.reservoir == nil, state.batteryFromPersistence.isEmpty {
++            ModernCard(cornerRadius: 15) {
++                HStack(spacing: 6) {
++                    Image(systemName: "keyboard.onehanded.left")
++                        .font(.caption)
++                    Text("Add pump")
++                        .font(.caption)
++                        .bold()
++                }
++                .frame(maxWidth: .infinity)
++                // Matches `ModernChip`'s default height so the empty state is the same size as the
++                // populated row it replaces.
++                .frame(height: 28)
++            }
++            .contentShape(Rectangle())
++            .onTapGesture { modernPumpTapAction() }
++        } else {
++            HStack(spacing: 7) {
++                if let reservoir = state.reservoir {
++                    ModernChip(
++                        systemImage: "cross.vial.fill",
++                        value: reservoir == 0xDEAD_BEEF
++                            ? "50+ " + String(localized: "U", comment: "Insulin unit")
++                            : (Formatter.integerFormatter.string(from: reservoir as NSNumber) ?? "0")
++                            + String(localized: " U", comment: "Insulin unit"),
++                        tint: PumpDisplayFormatting.reservoirColor(for: reservoir)
++                    )
++                }
++
++                if let shouldBatteryDisplay = state.batteryFromPersistence.first?.display, shouldBatteryDisplay {
++                    ModernChip(
++                        systemImage: "battery.100",
++                        value: "\(Formatter.integerFormatter.string(for: state.batteryFromPersistence.first?.percent ?? 100) ?? "100") %",
++                        tint: PumpDisplayFormatting.batteryColor(percent: state.batteryFromPersistence.first?.percent)
++                    )
++                }
++
++                if let expiresAt = state.pumpExpiresAtDate {
++                    ModernChip(
++                        systemImage: PumpDisplayFormatting.hourglassIcon(
++                            expiresAtDate: expiresAt,
++                            activatedAtDate: state.pumpActivatedAtDate,
++                            timerDate: state.timerDate
++                        ),
++                        value: PumpDisplayFormatting.remainingTimeString(
++                            time: expiresAt.timeIntervalSince(state.timerDate)
++                        ),
++                        tint: PumpDisplayFormatting.timerColor(
++                            expiresAtDate: expiresAt,
++                            activatedAtDate: state.pumpActivatedAtDate,
++                            timerDate: state.timerDate
++                        )
++                    )
++                }
++            }
++            .contentShape(Rectangle())
++            .onTapGesture { modernPumpTapAction() }
++        }
++    }
++
++    private func modernPumpTapAction() {
++        if state.pumpDisplayState == nil {
++            // shows user confirmation dialog with pump model choices, then proceeds to setup
++            showPumpSelection.toggle()
++        } else {
++            // sends user to pump settings
++            state.shouldDisplayPumpSetupSheet.toggle()
++        }
++    }
++
++    // MARK: - Stat chips
++
++    @ViewBuilder var modernStatChipsRow: some View {
++        HStack(spacing: 7) {
++            ModernStatChip(label: String(localized: "IOB"), tint: .secondary) {
++                Text(
++                    (
++                        Formatter.decimalFormatterWithTwoFractionDigits
++                            .string(from: state.currentIOB as NSNumber) ?? "0"
++                    ) + String(localized: " U", comment: "Insulin unit")
++                )
++                .foregroundStyle(Color.insulin)
++            }
++
++            ModernStatChip(label: String(localized: "COB"), tint: .secondary) {
++                Text(
++                    (
++                        Formatter.decimalFormatterWithTwoFractionDigits.string(
++                            from: NSNumber(value: state.enactedAndNonEnactedDeterminations.first?.cob ?? 0)
++                        ) ?? "0"
++                    ) + String(localized: " g", comment: "gram of carbs")
++                )
++                .foregroundStyle(Color.loopYellow)
++            }
++
++            // All three chips are laid out at equal layout priority, so the `maxWidth: .infinity`
++            // inside `ModernStatChip` makes the HStack split the row into equal thirds.
++            //
++            // The basal readout is the longest of the three, but it does NOT get a layout priority
++            // bump: in an HStack the highest-priority child is offered all the remaining width
++            // first, and a child declaring `maxWidth: .infinity` accepts every point of it, which
++            // starved the IOB and COB chips down to their (near-zero, ellipsis-only) minimum width.
++            // The mockup's fixed 1.25x is not reproduced literally either — a hard ratio clips
++            // under larger Dynamic Type sizes. A third of the row fits "3.15 U/hr" at default type
++            // with room to spare, and the chip's own `lineLimit(1)` + `minimumScaleFactor` handle
++            // the rarer long forms (e.g. the manual-basal suffix) by scaling rather than clipping.
++            modernBasalChip
++        }
++    }
++
++    @ViewBuilder private var modernBasalChip: some View {
++        if state.maxIOB == 0.0 {
++            ModernStatChip(label: String(localized: "Max IOB"), tint: Color.loopRed) {
++                HStack(spacing: 4) {
++                    Image(systemName: "exclamationmark.circle.fill")
++                    Text("0 U")
++                }
++                .foregroundStyle(Color.loopRed)
++            }
++        } else {
++            // Only display the insulin delivery rate info if the pump is not
++            // suspended and is available (e.g., pod is paired & not faulted).
++            let pumpAvailable = state.apsManager.isScheduledBasal != nil
++            let isScheduled = state.apsManager?.isScheduledBasal == true
++
++            ModernStatChip(label: String(localized: "Basal"), tint: .secondary) {
++                if !state.apsManager.isSuspended, pumpAvailable {
++                    if let basalString = self.basalString {
++                        Text(basalString)
++                            .foregroundStyle(Color.insulinTintColor)
++                            // Matches the Classic layout, which dims a merely-scheduled rate.
++                            .opacity(isScheduled ? 0.6 : 1.0)
++                    } else {
++                        Text("No Data")
++                            .foregroundStyle(.secondary)
++                    }
++                } else {
++                    Text("--")
++                        .foregroundStyle(.secondary)
++                }
++            }
++        }
++    }
++
++    // MARK: - Chart card
++
++    /// The chart card.
++    ///
++    /// `MainChartView` sizes its three stacked regions (0.05 basal + 0.28 main + 0.12 IOB/COB, ~0.45
++    /// in total) as fractions of the `GeometryProxy` it is handed. It is deliberately handed the
++    /// *content* proxy — the same one `classicViewElements` passes to `mainChart(geo:)` — rather than
++    /// a proxy for this card, so the charts come out at exactly Classic's height instead of being
++    /// scaled down to whatever the surrounding cards happen to leave over. The card then sizes itself
++    /// to the chart rather than the other way round; every other element in the Modern layout is
++    /// budgeted against the remaining ~0.55 of the content height.
++    @ViewBuilder func modernChartCard(_ geo: GeometryProxy) -> some View {
++        ModernCard(cornerRadius: 20) {
++            MainChartView(
++                geo: geo,
++                // Same subtraction Classic makes: the notifications banner is added as a safe-area
++                // inset on this layout's root `VStack`, so it takes its height out of the space the
++                // stack has to lay out in, and the chart has to give the same amount back.
++                safeAreaSize: notificationsDisabled == true ? safeAreaSize : 0,
++                units: state.units,
++                hours: state.filteredHours,
++                highGlucose: state.highGlucose,
++                lowGlucose: state.lowGlucose,
++                currentGlucoseTarget: state.currentGlucoseTarget,
++                glucoseColorScheme: state.glucoseColorScheme,
++                screenHours: state.hours,
++                displayXgridLines: state.displayXgridLines,
++                displayYgridLines: state.displayYgridLines,
++                thresholdLines: state.thresholdLines,
++                state: state
++            )
++            .padding(.vertical, UIDevice.adjustPadding(min: 2, max: 6))
++        }
++        // The chart's own minimum heights set the floor; this lets the card additionally soak up any
++        // space the elements above and below do not use on a taller device, which `MainChartView`'s
++        // internal `Spacer()` passes on to the gap above the IOB/COB band.
++        .frame(maxHeight: .infinity)
++    }
++
++    // MARK: - Controls row
++
++    @ViewBuilder var modernControlsRow: some View {
++        let buttonColor = (colorScheme == .dark ? Color.white : Color.black).opacity(0.8)
++
++        HStack {
++            modernChipButton(
++                label: String(localized: "Stats", comment: "Stats icon in main view"),
++                iconString: statsIconString,
++                color: buttonColor,
++                action: { state.showModal(for: .statistics) }
++            )
++
++            Spacer()
++
++            HStack(spacing: 4) {
++                ForEach(timeButtons) { button in
++                    Button(action: {
++                        state.hours = button.hours
++                    }) {
++                        Group {
++                            if button.active {
++                                Text(
++                                    button.hours.description + "\u{00A0}" +
++                                        String(localized: "h", comment: "h")
++                                )
++                            } else {
++                                Text(button.hours.description)
++                            }
++                        }
++                        .font(.footnote)
++                        .fontWeight(button.active ? .semibold : .regular)
++                        .padding(.vertical, 5)
++                        .padding(.horizontal, 10)
++                        .foregroundColor(button.active ? Color.white : buttonColor)
++                        .background(button.active ? Color.tabBar : Color.clear)
++                        .clipShape(Capsule())
++                    }
++                }
++            }
++
++            Spacer()
++
++            modernChipButton(
++                label: String(localized: "Info", comment: "Info icon in main view"),
++                iconString: "info",
++                color: buttonColor,
++                action: { state.isLegendPresented.toggle() }
++            )
++        }
++    }
++
++    @ViewBuilder private func modernChipButton(
++        label: String,
++        iconString: String,
++        color: Color,
++        action: @escaping () -> Void
++    ) -> some View {
++        Button(action: action) {
++            HStack(spacing: 4) {
++                Image(systemName: iconString)
++                Text(label)
++            }
++            .font(.footnote)
++            .padding(.vertical, 5)
++            .padding(.horizontal, 10)
++            .foregroundStyle(color)
++            .background(
++                Capsule().fill(Color.chart)
++            )
++        }
++    }
++
++    // MARK: - Adjustment card
++
++    /// Same content and behaviour as `adjustmentView(geo:)` — the branch structure, the shared
++    /// override / temp-target / cancel sub-views and all three confirmation dialogs are reused
++    /// verbatim. Only the card container is restyled.
++    @ViewBuilder func modernAdjustmentCard(_ geo: GeometryProxy) -> some View {
++        ModernCard(cornerRadius: 16) {
++            HStack {
++                if let overrideString = overrideString, let tempTargetString = tempTargetString {
++                    HStack {
++                        adjustmentsOverrideView(overrideString)
++
++                        Spacer()
++
++                        Divider()
++                            .frame(height: geo.size.height * 0.05)
++                            .padding(.horizontal, 2)
++
++                        adjustmentsTempTargetView(tempTargetString)
++
++                        Spacer()
++
++                        adjustmentsCancelView({
++                            if !latestTempTarget.isEmpty, !latestOverride.isEmpty {
++                                showCancelConfirmDialog = true
++                            } else if !latestOverride.isEmpty {
++                                showCancelAlert = true
++                            } else if !latestTempTarget.isEmpty {
++                                showCancelAlert = true
++                            }
++                        })
++                    }
++                } else if let overrideString = overrideString {
++                    adjustmentsOverrideView(overrideString)
++                    Spacer()
++                    adjustmentsCancelOverrideView()
++
++                } else if let tempTargetString = tempTargetString {
++                    HStack {
++                        adjustmentsTempTargetView(tempTargetString)
++                        Spacer()
++                        adjustmentsCancelTempTargetView()
++                    }
++                } else {
++                    noActiveAdjustmentsView()
++                }
++            }
++            .padding(.horizontal, 14)
++            .frame(height: max(geo.size.height * 0.068, 42))
++            .confirmationDialog("Adjustment to Stop", isPresented: $showCancelConfirmDialog) {
++                Button("Stop Override", role: .destructive) {
++                    Task {
++                        guard let objectID = latestOverride.first?.objectID else { return }
++                        await state.cancelOverride(withID: objectID)
++                    }
++                }
++                Button("Stop Temp Target", role: .destructive) {
++                    Task {
++                        guard let objectID = latestTempTarget.first?.objectID else { return }
++                        await state.cancelTempTarget(withID: objectID)
++                    }
++                }
++                Button("Stop All Adjustments", role: .destructive) {
++                    Task {
++                        guard let overrideObjectID = latestOverride.first?.objectID else { return }
++                        await state.cancelOverride(withID: overrideObjectID)
++
++                        guard let tempTargetObjectID = latestTempTarget.first?.objectID else { return }
++                        await state.cancelTempTarget(withID: tempTargetObjectID)
++                    }
++                }
++            } message: {
++                Text("Select Adjustment")
++            }
++        }
++    }
++}
+diff --git a/Trio/Sources/Modules/Home/View/HomeRootView.swift b/Trio/Sources/Modules/Home/View/HomeRootView.swift
+index 66888cd9f..5427ba46c 100644
+--- a/Trio/Sources/Modules/Home/View/HomeRootView.swift
++++ b/Trio/Sources/Modules/Home/View/HomeRootView.swift
+@@ -887,6 +887,15 @@ extension Home {
+         }
+ 
+         @ViewBuilder func mainViewElements(_ geo: GeometryProxy) -> some View {
++            switch state.homeLayoutStyle {
++            case .classic:
++                classicViewElements(geo)
++            case .modern:
++                modernViewElements(geo)
++            }
++        }
++
++        @ViewBuilder func classicViewElements(_ geo: GeometryProxy) -> some View {
+             VStack(spacing: 0) {
+                 ZStack {
+                     if let apsManager = state.apsManager, let bluetoothManager = apsManager.bluetoothManager,
+diff --git a/Trio/Sources/Modules/Home/View/ModernHomeComponents.swift b/Trio/Sources/Modules/Home/View/ModernHomeComponents.swift
+new file mode 100644
+index 000000000..f1e6ab260
+--- /dev/null
++++ b/Trio/Sources/Modules/Home/View/ModernHomeComponents.swift
+@@ -0,0 +1,237 @@
++import Foundation
++import SwiftUI
++
++// MARK: - Card container
++
++/// The card surface shared by every element of the Modern home layout.
++///
++/// Uses `Color.chart` for the fill, which already resolves to white in light mode and a dark card
++/// colour in dark mode, so the layout follows the user's appearance preference rather than forcing
++/// the light palette the design mockups were drawn in.
++struct ModernCard<Content: View>: View {
++    var cornerRadius: CGFloat = 20
++    @ViewBuilder var content: () -> Content
++
++    @Environment(\.colorScheme) var colorScheme
++
++    var body: some View {
++        content()
++            .background(
++                RoundedRectangle(cornerRadius: cornerRadius)
++                    .fill(Color.chart)
++            )
++            .overlay(
++                RoundedRectangle(cornerRadius: cornerRadius)
++                    .stroke(
++                        colorScheme == .dark ? Color.white.opacity(0.08) : Color.clear,
++                        lineWidth: 0.5
++                    )
++            )
++            .shadow(
++                color: colorScheme == .dark ? Color.clear : Color.black.opacity(0.06),
++                radius: 3,
++                y: 1
++            )
++    }
++}
++
++// MARK: - Device chip
++
++/// A compact pill showing a single device readout: reservoir, battery or pod age.
++struct ModernChip: View {
++    let systemImage: String
++    let value: String
++    var tint: Color = .secondary
++    var height: CGFloat = 28
++
++    var body: some View {
++        ModernCard(cornerRadius: height / 2) {
++            HStack(spacing: 4) {
++                Image(systemName: systemImage)
++                    .font(.caption)
++                    .foregroundStyle(tint)
++                Text(value)
++                    .font(.caption)
++                    .fontWeight(.semibold)
++                    .fontDesign(.rounded)
++                    .lineLimit(1)
++                    .minimumScaleFactor(0.7)
++            }
++            .frame(maxWidth: .infinity)
++            .frame(height: height)
++        }
++    }
++}
++
++// MARK: - Stat chip
++
++/// A stat tile: small tracked caption above a bold rounded value. Used for IOB, COB and basal.
++struct ModernStatChip<Value: View>: View {
++    let label: String
++    var tint: Color = .secondary
++    @ViewBuilder var value: () -> Value
++
++    var body: some View {
++        ModernCard(cornerRadius: 14) {
++            VStack(spacing: 2) {
++                Text(label)
++                    .font(.caption2)
++                    .fontWeight(.medium)
++                    .tracking(0.3)
++                    // Uppercasing happens here rather than in the source strings so translators
++                    // receive normally-cased text and locales that should not uppercase are respected.
++                    .textCase(.uppercase)
++                    .foregroundStyle(tint)
++                    .lineLimit(1)
++                    .minimumScaleFactor(0.7)
++                value()
++                    .font(.callout)
++                    .fontWeight(.bold)
++                    .fontDesign(.rounded)
++                    .lineLimit(1)
++                    // Tighten letter spacing before falling back to scaling the glyphs down, so the
++                    // longest readout (the basal rate) stays at full size in its share of the row.
++                    .allowsTightening(true)
++                    .minimumScaleFactor(0.7)
++            }
++            .padding(.horizontal, 6)
++            .padding(.vertical, 6)
++            // Every chip claims the full width offered to it, so an HStack of chips at equal layout
++            // priority splits the row evenly. Do not give one chip a higher `layoutPriority`: the
++            // stack offers the top-priority child all remaining width first, and because of this
++            // modifier it takes every point, collapsing its siblings to an ellipsis.
++            .frame(maxWidth: .infinity)
++        }
++    }
++}
++
++// MARK: - Range rail
++
++/// A horizontal bar showing where the current reading sits relative to the user's target range.
++///
++/// The colour ramp is sampled from `Trio.getDynamicGlucoseColor`, the same function that colours the
++/// glucose number itself, so the rail and the number always agree — including under the static colour
++/// scheme, where the ramp resolves to discrete red / green / orange bands rather than a gradient.
++struct GlucoseRangeRail: View {
++    let glucoseValue: Decimal?
++    let units: GlucoseUnits
++    let lowGlucose: Decimal
++    let highGlucose: Decimal
++    let currentGlucoseTarget: Decimal
++    let glucoseColorScheme: GlucoseColorScheme
++
++    /// The rail's domain. Matches the hardcoded bounds the dynamic colour scheme already uses at its
++    /// call sites in `CurrentGlucoseView` and `GlucoseChartView`, so the ramp spans the full range of
++    /// colours those views can produce.
++    private let railLowerBound = Decimal(55)
++    private let railUpperBound = Decimal(220)
++
++    private let railHeight: CGFloat = 7
++    private let thumbDiameter: CGFloat = 14
++
++    /// Colour for an arbitrary glucose value, mirroring `CurrentGlucoseView`'s call exactly —
++    /// including its hardcoded 55/220 substitution under the dynamic scheme.
++    private func color(for value: Decimal) -> Color {
++        let isDynamicColorScheme = glucoseColorScheme == .dynamicColor
++        return Trio.getDynamicGlucoseColor(
++            glucoseValue: value,
++            highGlucoseColorValue: isDynamicColorScheme ? railUpperBound : highGlucose,
++            lowGlucoseColorValue: isDynamicColorScheme ? railLowerBound : lowGlucose,
++            targetGlucose: currentGlucoseTarget,
++            glucoseColorScheme: glucoseColorScheme
++        )
++    }
++
++    /// Position of `value` along the rail as a 0...1 fraction, clamped at both ends so out-of-range
++    /// readings park at the edge rather than escaping the bar.
++    private func fraction(for value: Decimal) -> CGFloat {
++        let span = railUpperBound - railLowerBound
++        guard span > 0 else { return 0 }
++        let clamped = min(max(value, railLowerBound), railUpperBound)
++        return CGFloat(Double(truncating: ((clamped - railLowerBound) / span) as NSNumber))
++    }
++
++    private var gradient: LinearGradient {
++        let sampleCount = 24
++        let span = railUpperBound - railLowerBound
++        let stops = (0 ... sampleCount).map { step -> Color in
++            let value = railLowerBound + (span * Decimal(step) / Decimal(sampleCount))
++            return color(for: value)
++        }
++        return LinearGradient(colors: stops, startPoint: .leading, endPoint: .trailing)
++    }
++
++    private func axisLabel(_ value: Decimal) -> String {
++        units == .mgdL ? value.description : value.formattedAsMmolL
++    }
++
++    var body: some View {
++        VStack(spacing: 2) {
++            GeometryReader { geo in
++                let usableWidth = max(geo.size.width - thumbDiameter, 0)
++
++                ZStack(alignment: .leading) {
++                    Capsule()
++                        .fill(gradient)
++                        .frame(height: railHeight)
++                        .frame(maxHeight: .infinity, alignment: .center)
++
++                    if let glucoseValue {
++                        Circle()
++                            .fill(Color.chart)
++                            .overlay(
++                                Circle()
++                                    .stroke(color(for: glucoseValue), lineWidth: 3.5)
++                            )
++                            .frame(width: thumbDiameter, height: thumbDiameter)
++                            .offset(x: fraction(for: glucoseValue) * usableWidth)
++                            .frame(maxHeight: .infinity, alignment: .center)
++                    }
++                }
++            }
++            .frame(height: thumbDiameter)
++
++            HStack {
++                Text(axisLabel(railLowerBound))
++                Spacer()
++                Text(axisLabel(lowGlucose))
++                Spacer()
++                Text(axisLabel(highGlucose))
++                Spacer()
++                Text(axisLabel(railUpperBound))
++            }
++            .font(.system(size: 9))
++            .foregroundStyle(.secondary)
++        }
++    }
++}
++
++// MARK: - Trend direction
++
++extension BloodGlucose.Direction {
++    /// Rotation applied to the Modern layout's trend arrow. Mirrors the mapping
++    /// `CurrentGlucoseView` uses for the Classic layout's triangle.
++    var modernTrendRotation: Double {
++        switch self {
++        case .doubleUp,
++             .singleUp,
++             .tripleUp:
++            return -90
++        case .fortyFiveUp:
++            return -45
++        case .flat:
++            return 0
++        case .fortyFiveDown:
++            return 45
++        case .doubleDown,
++             .singleDown,
++             .tripleDown:
++            return 90
++        case .notComputable,
++             .rateOutOfRange:
++            return 0
++        default:
++            return 0
++        }
++    }
++}
+diff --git a/Trio/Sources/Modules/Settings/SettingItems.swift b/Trio/Sources/Modules/Settings/SettingItems.swift
+index 1ec213728..5c56a7b79 100644
+--- a/Trio/Sources/Modules/Settings/SettingItems.swift
++++ b/Trio/Sources/Modules/Settings/SettingItems.swift
+@@ -292,7 +292,10 @@ enum SettingItems {
+                 "Time in Tight Range (TITR)",
+                 "Time in Normoglycemia (TING)",
+                 "X-Axis Interval Step",
+-                "Require Adjustments Confirmation"
++                "Require Adjustments Confirmation",
++                "Home Screen Design",
++                "Classic",
++                "Modern"
+             ],
+             scrollTargetLabels: [
+                 "Show Y-Axis Grid Lines": "Show X-Axis Grid Lines",
+@@ -306,7 +309,10 @@ enum SettingItems {
+                 "Dark Scheme": "Appearance",
+                 "Light Scheme": "Appearance",
+                 "X-Axis Interval Step": "Show X-Axis Grid Lines",
+-                "Carbs Required Threshold": "Show Carbs Required Badge"
++                "Carbs Required Threshold": "Show Carbs Required Badge",
++                "Home Screen Design": "Appearance",
++                "Classic": "Appearance",
++                "Modern": "Appearance"
+             ],
+             path: ["Features", "User Interface"]
+         ),
+diff --git a/Trio/Sources/Modules/UserInterfaceSettings/UserInterfaceSettingsStateModel.swift b/Trio/Sources/Modules/UserInterfaceSettings/UserInterfaceSettingsStateModel.swift
+index 3c661c744..123774c2e 100644
+--- a/Trio/Sources/Modules/UserInterfaceSettings/UserInterfaceSettingsStateModel.swift
++++ b/Trio/Sources/Modules/UserInterfaceSettings/UserInterfaceSettingsStateModel.swift
+@@ -15,6 +15,7 @@ extension UserInterfaceSettings {
+         @Published var eA1cDisplayUnit: EstimatedA1cDisplayUnit = .percent
+         @Published var timeInRangeType: TimeInRangeType = .timeInTightRange
+         @Published var requireAdjustmentsConfirmation: Bool = false
++        @Published var homeLayoutStyle: HomeLayoutStyle = .classic
+ 
+         var units: GlucoseUnits = .mgdL
+ 
+@@ -48,6 +49,8 @@ extension UserInterfaceSettings {
+ 
+             subscribeSetting(\.requireAdjustmentsConfirmation, on: $requireAdjustmentsConfirmation) {
+                 requireAdjustmentsConfirmation = $0 }
++
++            subscribeSetting(\.homeLayoutStyle, on: $homeLayoutStyle) { homeLayoutStyle = $0 }
+         }
+     }
+ }
+diff --git a/Trio/Sources/Modules/UserInterfaceSettings/View/UserInterfaceSettingsRootView.swift b/Trio/Sources/Modules/UserInterfaceSettings/View/UserInterfaceSettingsRootView.swift
+index a288eed95..4a528ae83 100644
+--- a/Trio/Sources/Modules/UserInterfaceSettings/View/UserInterfaceSettingsRootView.swift
++++ b/Trio/Sources/Modules/UserInterfaceSettings/View/UserInterfaceSettingsRootView.swift
+@@ -95,6 +95,61 @@ extension UserInterfaceSettings {
+                                 ).buttonStyle(BorderlessButtonStyle())
+                             }.padding(.top)
+                         }.padding(.bottom)
++
++                        VStack {
++                            Picker(
++                                selection: $state.homeLayoutStyle,
++                                label: Text("Home Screen Design")
++                            ) {
++                                ForEach(HomeLayoutStyle.allCases) { selection in
++                                    Text(selection.displayName).tag(selection)
++                                }
++                            }.padding(.top)
++
++                            HStack(alignment: .center) {
++                                Text(
++                                    "Choose the layout of Trio's Main tab. See hint for more details."
++                                )
++                                .font(.footnote)
++                                .foregroundColor(.secondary)
++                                .lineLimit(nil)
++                                Spacer()
++                                Button(
++                                    action: {
++                                        hintLabel = String(localized: "Home Screen Design")
++                                        selectedVerboseHint =
++                                            AnyView(
++                                                VStack(alignment: .leading, spacing: 10) {
++                                                    Text(
++                                                        "Sets the layout of Trio's Main tab. Descriptions of each option found below."
++                                                    )
++                                                    VStack(alignment: .leading, spacing: 5) {
++                                                        Text("Classic:").bold()
++                                                        Text(
++                                                            "The original layout, with the gradient glucose ring"
++                                                        )
++                                                    }
++                                                    VStack(alignment: .leading, spacing: 5) {
++                                                        Text("Modern:").bold()
++                                                        Text(
++                                                            "A card-based layout, with a large glucose reading and an in-range indicator"
++                                                        )
++                                                    }
++                                                    Text(
++                                                        "Both layouts show the same information and behave identically. Nothing else in the app changes."
++                                                    )
++                                                }
++                                            )
++                                        shouldDisplayHint.toggle()
++                                    },
++                                    label: {
++                                        HStack {
++                                            Image(systemName: "questionmark.circle")
++                                        }
++                                    }
++                                ).buttonStyle(BorderlessButtonStyle())
++                            }.padding(.top)
++                        }.padding(.bottom)
+                     }
+                 ).settingsSearchTarget(label: String(localized: "Appearance"))
+ 
