@@ -65,8 +65,11 @@ extension Home.RootView {
     /// last measured reading. Each is independently `nil` when its source has nothing near
     /// `date` — a determination-less start, or a scrub beyond how far oref projected.
     private func predictedValues(at date: Date) -> (iob: Decimal?, cob: Decimal?, glucose: Decimal?) {
-        let iob = ChartSelectionLookup.iobProjection(at: date, in: state.iobProjection).map(Decimal.init)
-        let cob = ChartSelectionLookup.cobProjection(at: date, in: state.cobProjection).map(Decimal.init)
+        // Spelled out rather than `.map(Decimal.init)`: the bare initializer reference is
+        // ambiguous between Decimal's own Double/floatLiteral inits, the project's
+        // `init(algorithmValue:)` and Charts' `init?(primitivePlottable:)`.
+        let iob = ChartSelectionLookup.iobProjection(at: date, in: state.iobProjection).map { Decimal($0) }
+        let cob = ChartSelectionLookup.cobProjection(at: date, in: state.cobProjection).map { Decimal($0) }
         let glucoseMgdL = ChartSelectionLookup.glucoseForecastMidpoint(
             at: date,
             minForecast: state.minForecast,
