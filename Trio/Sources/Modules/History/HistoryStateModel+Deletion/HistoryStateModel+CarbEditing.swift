@@ -32,7 +32,8 @@ extension History.StateModel {
                     newCarbs: newCarbs,
                     newFat: newFat,
                     newProtein: newProtein,
-                    newNote: newNote
+                    newNote: newNote,
+                    skipRecompute: true
                 )
 
                 try await createNewEntries(
@@ -95,25 +96,26 @@ extension History.StateModel {
         newCarbs _: Decimal,
         newFat _: Decimal,
         newProtein _: Decimal,
-        newNote _: String
+        newNote _: String,
+        skipRecompute: Bool = false
     ) async throws {
         if ((originalEntry.entryValues?.carbs ?? 0) == 0 && (originalEntry.entryValues?.fat ?? 0) > 0) ||
             ((originalEntry.entryValues?.carbs ?? 0) == 0 && (originalEntry.entryValues?.protein ?? 0) > 0)
         {
             // Delete the zero-carb-entry and all its carb equivalents connected by the same fpuID from remote services and Core Data
             // Use fpuID
-            try await deleteCarbs(treatmentObjectID, isFpuOrComplexMeal: true)
+            try await deleteCarbs(treatmentObjectID, isFpuOrComplexMeal: true, skipRecompute: skipRecompute)
         } else if ((originalEntry.entryValues?.carbs ?? 0) > 0 && (originalEntry.entryValues?.fat ?? 0) > 0) ||
             ((originalEntry.entryValues?.carbs ?? 0) > 0 && (originalEntry.entryValues?.protein ?? 0) > 0)
         {
             // Delete carb entry and carb equivalents that are all connected by the same fpuID from remote services and Core Data
             // Use fpuID
-            try await deleteCarbs(treatmentObjectID, isFpuOrComplexMeal: true)
+            try await deleteCarbs(treatmentObjectID, isFpuOrComplexMeal: true, skipRecompute: skipRecompute)
 
         } else {
             // Delete just the carb entry since there are no carb equivalents
             // Use NSManagedObjectID
-            try await deleteCarbs(treatmentObjectID)
+            try await deleteCarbs(treatmentObjectID, skipRecompute: skipRecompute)
         }
     }
 

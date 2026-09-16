@@ -27,7 +27,11 @@ extension History.StateModel {
         }
     }
 
-    func deleteCarbs(_ treatmentObjectID: NSManagedObjectID, isFpuOrComplexMeal: Bool = false) async throws {
+    func deleteCarbs(
+        _ treatmentObjectID: NSManagedObjectID,
+        isFpuOrComplexMeal: Bool = false,
+        skipRecompute: Bool = false
+    ) async throws {
         // Delete from Nightscout/Apple Health/Tidepool
         await deleteFromServices(treatmentObjectID, isFPUDeletion: isFpuOrComplexMeal)
 
@@ -35,7 +39,9 @@ extension History.StateModel {
         await carbsStorage.deleteCarbsEntryStored(treatmentObjectID)
 
         // Perform a determine basal sync to update cob
-        try await apsManager.determineBasalSync()
+        if !skipRecompute {
+            try await apsManager.determineBasalSync()
+        }
     }
 
     /// Deletes carb and FPU entries from all connected services (Nightscout, HealthKit, Tidepool)
