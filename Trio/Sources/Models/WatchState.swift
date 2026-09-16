@@ -13,6 +13,7 @@ struct WatchState: Hashable, Equatable, Sendable, Encodable, Decodable {
     var units: GlucoseUnits = .mgdL
     var iob: String?
     var cob: String?
+    var eventualBG: String?
     var lastLoopTime: String?
     var overridePresets: [OverridePresetWatch] = []
     var tempTargetPresets: [TempTargetPresetWatch] = []
@@ -49,6 +50,7 @@ struct WatchState: Hashable, Equatable, Sendable, Encodable, Decodable {
             lhs.units == rhs.units &&
             lhs.iob == rhs.iob &&
             lhs.cob == rhs.cob &&
+            lhs.eventualBG == rhs.eventualBG &&
             lhs.lastLoopTime == rhs.lastLoopTime &&
             lhs.overridePresets == rhs.overridePresets &&
             lhs.tempTargetPresets == rhs.tempTargetPresets &&
@@ -81,6 +83,7 @@ struct WatchState: Hashable, Equatable, Sendable, Encodable, Decodable {
         hasher.combine(units)
         hasher.combine(iob)
         hasher.combine(cob)
+        hasher.combine(eventualBG)
         hasher.combine(lastLoopTime)
         hasher.combine(overridePresets)
         hasher.combine(tempTargetPresets)
