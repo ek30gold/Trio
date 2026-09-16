@@ -154,8 +154,11 @@ final class BaseScheduledOverrideManager: ScheduledOverrideManager, Injectable {
             if let trimmed {
                 override.duration = NSDecimalNumber(decimal: trimmed)
             }
-            override.isScheduled = false // no longer pending — activation is about to start it
-
+            // The trimmed duration has to be committed before activation, or the Override starts
+            // at its original untrimmed length. `isScheduled` deliberately stays true across this
+            // save: clearing it first would mean a throw below leaves the row neither pending nor
+            // running, so catch-up would never retry and nothing would tell the user — the silent
+            // miss this feature exists to prevent.
             if viewContext.hasChanges {
                 try viewContext.save()
             }
@@ -164,6 +167,17 @@ final class BaseScheduledOverrideManager: ScheduledOverrideManager, Injectable {
             // row, timestamps it and uploads to Nightscout — the full sequence every other
             // activation path in the app goes through.
             try await adjustmentManager.activateOverride(.objectID(id), source: .scheduled)
+
+            // Only now is it genuinely no longer pending. If this save throws, the row stays
+            // scheduled and the next heartbeat re-runs activation, which is harmless — the same
+            // benign double-activate the concurrent-heartbeat case already allows — and better
+            // than dropping it silently. A row that keeps failing ages past the grace window and
+            // is dropped with a notification rather than vanishing.
+            override.isScheduled = false
+
+            if viewContext.hasChanges {
+                try viewContext.save()
+            }
 
             debug(
                 .default,
@@ -279,13 +293,20 @@ final class BaseScheduledOverrideManager: ScheduledOverrideManager, Injectable {
             if let trimmed {
                 tempTarget.duration = NSDecimalNumber(decimal: trimmed)
             }
-            tempTarget.isScheduled = false
-
+            // Same ordering as `activate(_:now:)`: commit the trimmed duration first, but leave
+            // `isScheduled` true until activation has actually succeeded, so a throw leaves the
+            // row retryable instead of silently unscheduled.
             if viewContext.hasChanges {
                 try viewContext.save()
             }
 
             try await adjustmentManager.activateTempTarget(.objectID(id), source: .scheduled)
+
+            tempTarget.isScheduled = false
+
+            if viewContext.hasChanges {
+                try viewContext.save()
+            }
 
             debug(
                 .default,
