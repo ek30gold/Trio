@@ -23,11 +23,15 @@ extension Home.RootView {
             // Renders from the last resolved selection, which is deliberately not cleared on
             // decay: the row has to keep its values to fade out with, and it is invisible
             // (and untouchable) for as long as no readout is showing.
-            if let readoutDate = chartReadoutDate,
-               let selectedGlucose = ChartSelectionLookup.glucose(at: readoutDate, in: state.glucoseFromPersistence)
-            {
+            //
+            // No `GlucoseStored` guard here any more: a scrub past "now" resolves via oref's
+            // projections instead of a reading (see `updateChartReadout`), and `ChartSelectionRow`
+            // itself renders that case — the gate would drop exactly the row this feature adds.
+            if let readoutDate = chartReadoutDate {
+                let predicted = predictedValues(at: readoutDate)
                 ChartSelectionRow(
-                    selectedGlucose: selectedGlucose,
+                    selectedGlucose: ChartSelectionLookup.glucose(at: readoutDate, in: state.glucoseFromPersistence),
+                    selection: readoutDate,
                     determination: chartReadoutDeterminationDate.flatMap {
                         ChartSelectionLookup.determination(at: $0, in: state.enactedAndNonEnactedDeterminations)
                     },
@@ -36,13 +40,44 @@ extension Home.RootView {
                     lowGlucose: state.lowGlucose,
                     currentGlucoseTarget: state.currentGlucoseTarget,
                     glucoseColorScheme: state.glucoseColorScheme,
-                    isSmoothingEnabled: state.settingsManager.settings.smoothGlucose
+                    isSmoothingEnabled: state.settingsManager.settings.smoothGlucose,
+                    predictedIOB: predicted.iob,
+                    predictedCOB: predicted.cob,
+                    predictedGlucose: predicted.glucose
                 )
                 .padding(.horizontal)
                 .opacity(isChartReadoutVisible ? 1 : 0)
                 .allowsHitTesting(isChartReadoutVisible)
             }
         }
+    }
+
+    /// The index-to-date anchor `minForecast` / `maxForecast` are laid out against — the exact
+    /// same value `MainChartView` hands `ForecastView.lastDeterminationDate` to place the
+    /// forecast cone, reused as-is so the readout can't disagree with the cone it is reading
+    /// off of about which instant index N is. (`iobProjection` / `cobProjection` carry their
+    /// own absolute dates and need no anchor to look up.)
+    private var glucoseForecastAnchor: Date {
+        state.determinationsFromPersistence.first?.deliverAt ?? .distantPast
+    }
+
+    /// oref's own projected IOB, COB and glucose at `date`, for a scrub that has run past the
+    /// last measured reading. Each is independently `nil` when its source has nothing near
+    /// `date` — a determination-less start, or a scrub beyond how far oref projected.
+    private func predictedValues(at date: Date) -> (iob: Decimal?, cob: Decimal?, glucose: Decimal?) {
+        // Spelled out rather than `.map(Decimal.init)`: the bare initializer reference is
+        // ambiguous between Decimal's own Double/floatLiteral inits, the project's
+        // `init(algorithmValue:)` and Charts' `init?(primitivePlottable:)`.
+        let iob = ChartSelectionLookup.iobProjection(at: date, in: state.iobProjection).map { Decimal($0) }
+        let cob = ChartSelectionLookup.cobProjection(at: date, in: state.cobProjection).map { Decimal($0) }
+        let glucoseMgdL = ChartSelectionLookup.glucoseForecastMidpoint(
+            at: date,
+            minForecast: state.minForecast,
+            maxForecast: state.maxForecast,
+            anchor: glucoseForecastAnchor
+        )
+        let glucose = glucoseMgdL.map { state.units == .mmolL ? $0.asMmolL : $0 }
+        return (iob, cob, glucose)
     }
 
     /// Decays the readout instead of dropping it: readings and determinations have holes, and
@@ -60,7 +95,13 @@ extension Home.RootView {
         if let selection = chartSelection {
             var resolvedAnything = false
 
-            if ChartSelectionLookup.glucose(at: selection, in: state.glucoseFromPersistence) != nil {
+            let hasGlucose = ChartSelectionLookup.glucose(at: selection, in: state.glucoseFromPersistence) != nil
+            // A future scrub never resolves a `GlucoseStored`; oref's own projections are what
+            // stand in for it, so they count as "resolved" the same as a real reading does.
+            let predicted = predictedValues(at: selection)
+            let hasProjection = predicted.iob != nil || predicted.cob != nil || predicted.glucose != nil
+
+            if hasGlucose || hasProjection {
                 chartReadoutDate = selection
                 resolvedAnything = true
             }
