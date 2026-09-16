@@ -4,7 +4,7 @@ import SwiftUI
 extension Adjustments.RootView {
     @ViewBuilder func tempTargets() -> some View {
         if state.isTempTargetEnabled, state.activeTempTargetName.isNotEmpty {
-            currentActiveAdjustment
+            currentActiveAdjustment(for: .tempTargets)
         }
         if state.scheduledTempTargets.isNotEmpty {
             scheduledTempTargets
@@ -12,7 +12,7 @@ extension Adjustments.RootView {
         if state.tempTargetPresets.isNotEmpty {
             tempTargetPresets
         } else {
-            defaultText
+            defaultText(for: .tempTargets)
         }
     }
 
