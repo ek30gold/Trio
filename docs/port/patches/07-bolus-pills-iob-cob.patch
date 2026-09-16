@@ -1,0 +1,188 @@
+diff --git a/Trio/Sources/Modules/Treatments/TreatmentsStateModel.swift b/Trio/Sources/Modules/Treatments/TreatmentsStateModel.swift
+index 8e5186db3..a358a70ac 100644
+--- a/Trio/Sources/Modules/Treatments/TreatmentsStateModel.swift
++++ b/Trio/Sources/Modules/Treatments/TreatmentsStateModel.swift
+@@ -111,6 +111,10 @@ extension Treatments {
+         var preprocessedData: [(id: UUID, forecast: Forecast, forecastValue: ForecastValue)] = []
+         var predictionsForChart: Predictions?
+         var simulatedDetermination: Determination?
++        /// Monotonic token identifying the most recent `updateForecasts` run. A run that finds the
++        /// token changed after awaiting has been superseded and must discard its results, so a slow
++        /// simulation cannot overwrite a newer one's determination or forecast arrays.
++        @MainActor private var forecastGeneration: UInt64 = 0
+         @MainActor var determinationObjectIDs: [NSManagedObjectID] = []
+ 
+         var minForecast: [Int] = []
+@@ -896,6 +900,9 @@ extension Treatments.StateModel {
+                     uam: forecastsSet.extractValues(for: "uam")
+                 )
+ 
++                // Carry the stored determination's real IOB/COB rather than zeros: this object is
++                // assigned to `simulatedDetermination`, which feeds both the Treatments view's
++                // on-board pills and the backdated-entry COB used by `calculateInsulin()`.
+                 return Determination(
+                     id: UUID(),
+                     reason: "",
+@@ -904,8 +911,8 @@ extension Treatments.StateModel {
+                     sensitivityRatio: 0,
+                     rate: 0,
+                     duration: 0,
+-                    iob: 0,
+-                    cob: 0,
++                    iob: (determinationObject?.iob ?? 0) as Decimal,
++                    cob: Decimal(determinationObject?.cob ?? 0),
+                     predictions: predictions.isEmpty ? nil : predictions,
+                     carbsReq: 0,
+                     temp: nil,
+@@ -961,11 +968,36 @@ extension Treatments.StateModel {
+         }
+ 
+         debug(.bolusState, "updateForecasts fired")
+-        if let forecastData = forecastData {
++
++        // Claim a generation for this run. Callers are not serialized — the Core Data sink, the
++        // debounced carb field, the un-debounced bolus field and the date picker can all be in
++        // flight at once — and a simulation takes long enough that they overlap in practice. Any
++        // run whose generation is no longer current has been superseded and must not publish its
++        // results, otherwise a stale simulation can overwrite a newer one and leave a determination
++        // on screen that does not match the entry.
++        forecastGeneration &+= 1
++        let generation = forecastGeneration
++
++        // A mapped `forecastData` describes the last stored loop result and knows nothing about the
++        // entry the user is currently composing. Callers supply it on appear and from the
++        // `OrefDetermination` Core Data sink, which fires on any save of that entity — including
++        // Nightscout flagging a determination as uploaded, which is decoupled from loop timing.
++        //
++        // Accepting it while an entry is pending would drop that entry from the on-board pills and,
++        // for a backdated entry, from the bolus recommendation: `BolusCalculationManager` zeroes the
++        // typed carbs for backdated entries and takes COB entirely from this determination, so a
++        // mapped one silently under-counts the meal. Re-simulate instead, so what is displayed and
++        // what is recommended both stay consistent with what is on screen.
++        //
++        // Fat and protein are deliberately not considered pending input: FPU carb-equivalents are
++        // delivered hours later and `simulateDetermineBasal` takes no FPU parameter.
++        let hasPendingEntry = carbs > 0 || amount > 0
++
++        if let forecastData = forecastData, !hasPendingEntry {
+             simulatedDetermination = forecastData
+             debugPrint("\(DebuggingIdentifiers.failed) minPredBG: \(minPredBG)")
+         } else {
+-            simulatedDetermination = await Task { [self] in
++            let simulationResult = await Task { [self] in
+                 debug(.bolusState, "calling simulateDetermineBasal to get forecast data")
+                 return await apsManager.simulateDetermineBasal(
+                     simulatedCarbsAmount: carbs,
+@@ -974,6 +1006,12 @@ extension Treatments.StateModel {
+                 )
+             }.value
+ 
++            guard generation == forecastGeneration else {
++                return debug(.bolusState, "discarding superseded forecast simulation")
++            }
++
++            simulatedDetermination = simulationResult
++
+             // Update evBG and minPredBG from simulated determination
+             if let simDetermination = simulatedDetermination {
+                 evBG = Decimal(simDetermination.eventualBG ?? 0)
+@@ -1014,8 +1052,17 @@ extension Treatments.StateModel {
+             }
+         }.value
+ 
+-        minForecast = await minForecastResult
+-        maxForecast = await maxForecastResult
++        // Await both before publishing either, so the cone is always drawn from a single run rather
++        // than a min from one and a max from another.
++        let newMinForecast = await minForecastResult
++        let newMaxForecast = await maxForecastResult
++
++        guard generation == forecastGeneration else {
++            return debug(.bolusState, "discarding superseded forecast bounds")
++        }
++
++        minForecast = newMinForecast
++        maxForecast = newMaxForecast
+     }
+ }
+ 
+diff --git a/Trio/Sources/Modules/Treatments/View/ForecastChart.swift b/Trio/Sources/Modules/Treatments/View/ForecastChart.swift
+index 9a57250a4..3ce276700 100644
+--- a/Trio/Sources/Modules/Treatments/View/ForecastChart.swift
++++ b/Trio/Sources/Modules/Treatments/View/ForecastChart.swift
+@@ -36,16 +36,34 @@ struct ForecastChart: View {
+     }
+ 
+     private var forecastChartLabels: some View {
+-        // Check if this is a backdated entry by comparing with the default date using a tolerance
+-        let isBackdated = abs(state.date.timeIntervalSince(state.defaultDate)) > 1.0
+-
+-        // When backdated, display no carbs as this label is only supposed to show current entered carbs
+-        let displayedCarbs = isBackdated ? 0 : state.carbs
++        // The carb and insulin pills show projected carbs and insulin on board, i.e. what will be
++        // on board once the pending entry is submitted, not a mirror of the input fields.
++        //
++        // `simulatedDetermination` has two writers: a `simulateDetermineBasal` run, which accounts
++        // for the pending entry, and `mapForecastsForChart()`, which supplies the last stored
++        // determination and does not. `updateForecasts(with:)` only accepts the latter when no
++        // entry is pending, so whenever there is something to fold in these values include it.
++        // Falling back to the last real determination keeps them showing a real number when no
++        // determination has been simulated at all.
++        let displayedCOB = state.simulatedDetermination?.cob ?? Decimal(state.cob)
++        let displayedIOB = state.simulatedDetermination?.iob ?? state.iob
++
++        let cobValue = Formatter.integerFormatter.string(from: displayedCOB as NSNumber) ?? "0"
++        let iobValue = Formatter.decimalFormatterWithTwoFractionDigits
++            .string(from: displayedIOB as NSNumber) ?? displayedIOB.description
++
++        // Keep the original `Text` shapes. An interpolated string literal is a `LocalizedStringKey`,
++        // so these are catalog lookups carrying locale-specific spacing: "%@ g" is translated as a
++        // unit, and "%@ " drops its trailing space in German precisely because "U" is translated
++        // there as " IE" with a leading one. Composing the strings by hand instead would lose the
++        // space in the carb pill and double it in the insulin pill.
++        let cobText = Text("\(cobValue) g")
++        let iobText = Text("\(iobValue) ") + Text(String(localized: "U", comment: "Insulin unit"))
+ 
+         return HStack {
+             HStack {
+                 Image(systemName: "fork.knife")
+-                Text("\(displayedCarbs.description) g")
++                cobText
+             }
+             .font(.footnote)
+             .foregroundStyle(.orange)
+@@ -54,14 +72,18 @@ struct ForecastChart: View {
+                 RoundedRectangle(cornerRadius: 10)
+                     .fill(Color.orange.opacity(0.2))
+             }
++            .accessibilityElement(children: .combine)
++            .accessibilityLabel(String(
++                localized: "Carbs on Board",
++                comment: "Accessibility label for the projected COB pill on the Treatments view"
++            ))
++            .accessibilityValue(cobText)
+ 
+             Spacer()
+ 
+             HStack {
+                 Image(systemName: "syringe.fill")
+-                Text(
+-                    "\(Formatter.bolusFormatter.string(from: state.amount as NSNumber) ?? state.amount.description) "
+-                ) + Text(String(localized: "U", comment: "Insulin unit"))
++                iobText
+             }
+ 
+             .font(.footnote)
+@@ -71,6 +93,12 @@ struct ForecastChart: View {
+                 RoundedRectangle(cornerRadius: 10)
+                     .fill(Color.blue.opacity(0.2))
+             }
++            .accessibilityElement(children: .combine)
++            .accessibilityLabel(String(
++                localized: "Insulin on Board",
++                comment: "Accessibility label for the projected IOB pill on the Treatments view"
++            ))
++            .accessibilityValue(iobText)
+ 
+             Spacer()
+ 

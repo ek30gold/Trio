@@ -1,0 +1,1478 @@
+diff --git a/Model/Classes+Properties/OverrideStored+CoreDataProperties.swift b/Model/Classes+Properties/OverrideStored+CoreDataProperties.swift
+index 61b151a7f..b2ceb5e26 100644
+--- a/Model/Classes+Properties/OverrideStored+CoreDataProperties.swift
++++ b/Model/Classes+Properties/OverrideStored+CoreDataProperties.swift
+@@ -17,6 +17,11 @@ public extension OverrideStored {
+     @NSManaged var isf: Bool
+     @NSManaged var isfAndCr: Bool
+     @NSManaged var isPreset: Bool
++    /// Marks a row created by "Schedule Override" that has not yet been activated.
++    /// Distinguishes a pending scheduled Override from a cancelled or finished one — without it,
++    /// the two are identical (`enabled == false`, `isPreset == false`, past `date`) and catch-up
++    /// would re-activate Overrides the user had cancelled.
++    @NSManaged var isScheduled: Bool
+     @NSManaged var isUploadedToNS: Bool
+     @NSManaged var name: String?
+     @NSManaged var orderPosition: Int16
+diff --git a/Model/Classes+Properties/TempTargetStored+CoreDataProperties.swift b/Model/Classes+Properties/TempTargetStored+CoreDataProperties.swift
+index d09311f48..1f3dd5d95 100644
+--- a/Model/Classes+Properties/TempTargetStored+CoreDataProperties.swift
++++ b/Model/Classes+Properties/TempTargetStored+CoreDataProperties.swift
+@@ -12,6 +12,9 @@ public extension TempTargetStored {
+     @NSManaged var halfBasalTarget: NSDecimalNumber?
+     @NSManaged var id: UUID?
+     @NSManaged var isPreset: Bool
++    /// Marks a Temp Target created by "Schedule" that has not yet been activated. Without it a
++    /// pending scheduled Temp Target is indistinguishable from a cancelled one.
++    @NSManaged var isScheduled: Bool
+     @NSManaged var isUploadedToNS: Bool
+     @NSManaged var name: String?
+     @NSManaged var orderPosition: Int16
+diff --git a/Model/TrioCoreDataPersistentContainer.xcdatamodeld/TrioCoreDataPersistentContainer.xcdatamodel/contents b/Model/TrioCoreDataPersistentContainer.xcdatamodeld/TrioCoreDataPersistentContainer.xcdatamodel/contents
+index 139fda1ad..82d703668 100644
+--- a/Model/TrioCoreDataPersistentContainer.xcdatamodeld/TrioCoreDataPersistentContainer.xcdatamodel/contents
++++ b/Model/TrioCoreDataPersistentContainer.xcdatamodeld/TrioCoreDataPersistentContainer.xcdatamodel/contents
+@@ -206,6 +206,7 @@
+         <attribute name="isf" optional="YES" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
+         <attribute name="isfAndCr" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+         <attribute name="isPreset" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
++        <attribute name="isScheduled" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+         <attribute name="isUploadedToNS" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+         <attribute name="name" optional="YES" attributeType="String"/>
+         <attribute name="orderPosition" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+@@ -282,6 +283,7 @@
+         <attribute name="halfBasalTarget" optional="YES" attributeType="Decimal" defaultValueString="0.0"/>
+         <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+         <attribute name="isPreset" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
++        <attribute name="isScheduled" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+         <attribute name="isUploadedToNS" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+         <attribute name="name" optional="YES" attributeType="String"/>
+         <attribute name="orderPosition" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+diff --git a/Trio.xcodeproj/project.pbxproj b/Trio.xcodeproj/project.pbxproj
+index 2cf98cfc9..bde472674 100644
+--- a/Trio.xcodeproj/project.pbxproj
++++ b/Trio.xcodeproj/project.pbxproj
+@@ -96,6 +96,7 @@
+ 		3811DF1025CAAAE200A708ED /* APSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3811DF0F25CAAAE200A708ED /* APSManager.swift */; };
+ 		38192E04261B82FA0094D973 /* ReachabilityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E03261B82FA0094D973 /* ReachabilityManager.swift */; };
+ 		38192E07261BA9960094D973 /* FetchTreatmentsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E06261BA9960094D973 /* FetchTreatmentsManager.swift */; };
++		394B908EB94A39E00DC26892 /* ScheduledOverrideManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB125EAF3BABAC1B970C1713 /* ScheduledOverrideManager.swift */; };
+ 		38192E0D261BAF980094D973 /* ConvenienceExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38192E0C261BAF980094D973 /* ConvenienceExtensions.swift */; };
+ 		3821ED4C25DD18BA00BC42AD /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3821ED4B25DD18BA00BC42AD /* Constants.swift */; };
+ 		382C133725F13A1E00715CE1 /* InsulinSensitivities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 382C133625F13A1E00715CE1 /* InsulinSensitivities.swift */; };
+@@ -415,6 +416,7 @@
+ 		B015AFE52E500000000D7351 /* BolusSafetyValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B015AFE42E500000000D7351 /* BolusSafetyValidatorTests.swift */; };
+ 		BD8FC0602D6619DB00B95AED /* CarbsStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD8FC05F2D6619DB00B95AED /* CarbsStorageTests.swift */; };
+ 		BD8FC0622D6619E600B95AED /* OverrideStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD8FC0612D6619E600B95AED /* OverrideStorageTests.swift */; };
++		7ED4FE4C493735FC5920614B /* ScheduledOverrideTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F85D04C114FF692A80E1AE2 /* ScheduledOverrideTests.swift */; };
+ 		BD8FC0642D6619EF00B95AED /* TempTargetStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD8FC0632D6619EF00B95AED /* TempTargetStorageTests.swift */; };
+ 		BD8FC0662D661A0000B95AED /* GlucoseStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD8FC0652D661A0000B95AED /* GlucoseStorageTests.swift */; };
+ 		BD8FC0712D661B0000B95AED /* TidepoolTherapySettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD8FC0702D661B0000B95AED /* TidepoolTherapySettingsTests.swift */; };
+@@ -988,6 +990,7 @@
+ 		3818AA70274C278200843DB3 /* LoopTestingKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = LoopTestingKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+ 		38192E03261B82FA0094D973 /* ReachabilityManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ReachabilityManager.swift; sourceTree = "<group>"; };
+ 		38192E06261BA9960094D973 /* FetchTreatmentsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FetchTreatmentsManager.swift; sourceTree = "<group>"; };
++		CB125EAF3BABAC1B970C1713 /* ScheduledOverrideManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledOverrideManager.swift; sourceTree = "<group>"; };
+ 		38192E0C261BAF980094D973 /* ConvenienceExtensions.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ConvenienceExtensions.swift; sourceTree = "<group>"; };
+ 		3821ED4B25DD18BA00BC42AD /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
+ 		382C133625F13A1E00715CE1 /* InsulinSensitivities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsulinSensitivities.swift; sourceTree = "<group>"; };
+@@ -1283,6 +1286,7 @@
+ 		B015AFE42E500000000D7351 /* BolusSafetyValidatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BolusSafetyValidatorTests.swift; sourceTree = "<group>"; };
+ 		BD8FC05F2D6619DB00B95AED /* CarbsStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarbsStorageTests.swift; sourceTree = "<group>"; };
+ 		BD8FC0612D6619E600B95AED /* OverrideStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverrideStorageTests.swift; sourceTree = "<group>"; };
++		1F85D04C114FF692A80E1AE2 /* ScheduledOverrideTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledOverrideTests.swift; sourceTree = "<group>"; };
+ 		BD8FC0632D6619EF00B95AED /* TempTargetStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TempTargetStorageTests.swift; sourceTree = "<group>"; };
+ 		BD8FC0652D661A0000B95AED /* GlucoseStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlucoseStorageTests.swift; sourceTree = "<group>"; };
+ 		BD8FC0702D661B0000B95AED /* TidepoolTherapySettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TidepoolTherapySettingsTests.swift; sourceTree = "<group>"; };
+@@ -2293,6 +2297,7 @@
+ 				38BF021E25E7F0DE00579895 /* DeviceDataManager.swift */,
+ 				38DAB289260D349500F74C1A /* FetchGlucoseManager.swift */,
+ 				38192E06261BA9960094D973 /* FetchTreatmentsManager.swift */,
++				CB125EAF3BABAC1B970C1713 /* ScheduledOverrideManager.swift */,
+ 				3856933F270B57A00002C50D /* CGM */,
+ 				38A504F625DDA0E200C5B9E8 /* Extensions */,
+ 				388E5A5825B6F0070019842D /* OpenAPS */,
+@@ -3136,6 +3141,7 @@
+ 				BD8FC05A2D6618AF00B95AED /* DeterminationStorageTests.swift */,
+ 				BD8FC05F2D6619DB00B95AED /* CarbsStorageTests.swift */,
+ 				BD8FC0612D6619E600B95AED /* OverrideStorageTests.swift */,
++				1F85D04C114FF692A80E1AE2 /* ScheduledOverrideTests.swift */,
+ 				BD8FC0632D6619EF00B95AED /* TempTargetStorageTests.swift */,
+ 				BD8FC0652D661A0000B95AED /* GlucoseStorageTests.swift */,
+ 			);
+@@ -4744,6 +4750,7 @@
+ 				195D80BB2AF6980B00D25097 /* DynamicSettingsStateModel.swift in Sources */,
+ 				E00EEC0327368630002FF094 /* ServiceAssembly.swift in Sources */,
+ 				38192E07261BA9960094D973 /* FetchTreatmentsManager.swift in Sources */,
++				394B908EB94A39E00DC26892 /* ScheduledOverrideManager.swift in Sources */,
+ 				19012CDC291D2CB900FB8210 /* LoopStats.swift in Sources */,
+ 				6632A0DC746872439A858B44 /* ISFEditorDataFlow.swift in Sources */,
+ 				DD17454B2C55C62800211FAC /* AutosensSettingsRootView.swift in Sources */,
+@@ -4984,6 +4991,7 @@
+ 				CEE9A65E2BBC9F6500EB5194 /* CalibrationsTests.swift in Sources */,
+ 				CA02000000000000000010C2 /* DeliveryLimitsSyncTests.swift in Sources */,
+ 				BD8FC0622D6619E600B95AED /* OverrideStorageTests.swift in Sources */,
++				7ED4FE4C493735FC5920614B /* ScheduledOverrideTests.swift in Sources */,
+ 				BD8FC0592D66189700B95AED /* TestAssembly.swift in Sources */,
+ 				DDC6CA6D2DD90A2A0060EE25 /* LocalizationTests.swift in Sources */,
+ 				3B997DCF2DC00A3A006B6BB2 /* JSONImporterTests.swift in Sources */,
+diff --git a/Trio/Sources/APS/FetchGlucoseManager.swift b/Trio/Sources/APS/FetchGlucoseManager.swift
+index fba87c958..6de5e8e24 100644
+--- a/Trio/Sources/APS/FetchGlucoseManager.swift
++++ b/Trio/Sources/APS/FetchGlucoseManager.swift
+@@ -40,6 +40,7 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
+     @Injected() var deviceDataManager: DeviceDataManager!
+     @Injected() var pluginCGMManager: PluginManager!
+     @Injected() var calibrationService: CalibrationService!
++    @Injected() var scheduledOverrideManager: ScheduledOverrideManager!
+ 
+     private var lifetime = Lifetime()
+     private let timer = DispatchTimer(timeInterval: 1.minutes.timeInterval)
+@@ -90,6 +91,16 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
+             .receive(on: processQueue)
+             .flatMap { [self] _ -> AnyPublisher<[BloodGlucose], Never> in
+                 debug(.nightscout, "FetchGlucoseManager timer heartbeat")
++
++                // Activate any scheduled Override that has come due. This sits on the timer pulse
++                // rather than on glucose arrival so it still runs during a CGM gap, and outside the
++                // Adjustments state model so it survives the app being terminated and relaunched in
++                // the background — the failure that made scheduled Overrides silently never start.
++                Task {
++                    await self.scheduledOverrideManager.catchUpOnDueScheduledOverrides()
++                    await self.scheduledOverrideManager.catchUpOnDueScheduledTempTargets()
++                }
++
+                 if let glucoseSource = self.glucoseSource {
+                     return glucoseSource.fetch(self.timer).eraseToAnyPublisher()
+                 } else {
+diff --git a/Trio/Sources/APS/ScheduledOverrideManager.swift b/Trio/Sources/APS/ScheduledOverrideManager.swift
+new file mode 100644
+index 000000000..8fab404e1
+--- /dev/null
++++ b/Trio/Sources/APS/ScheduledOverrideManager.swift
+@@ -0,0 +1,398 @@
++import CoreData
++import Foundation
++import Swinject
++import UserNotifications
++
++/// Activates scheduled Overrides whose start time has arrived.
++///
++/// This deliberately lives outside the view layer. The previous implementation armed an in-process
++/// `Task.sleep` timer inside `Adjustments.StateModel`, and re-armed it from that state model's
++/// `subscribe()` — which only runs when the Adjustments screen appears. If the app was terminated
++/// and relaunched in the background (a CGM reading waking it), nothing re-armed the timer and
++/// nothing registered the notification observer, so the Override silently never started and then
++/// became unreachable once its start time passed.
++///
++/// This manager is an app-lifetime service driven by the glucose pulse, so catch-up runs whenever
++/// Trio is running at all, regardless of which screen the user is on.
++protocol ScheduledOverrideManager {
++    /// Activates any scheduled Override that has come due, or drops it if it is too stale.
++    func catchUpOnDueScheduledOverrides() async
++    /// The same catch-up for scheduled Temp Targets, which had the identical defect.
++    func catchUpOnDueScheduledTempTargets() async
++}
++
++/// The catch-up policy, kept free of Core Data so it can be tested directly.
++enum ScheduledOverrideCatchUp {
++    enum DropReason: Equatable {
++        /// Trio was not running for long enough that starting now would be a dosing change at a
++        /// time the user never chose.
++        case tooStale
++        /// The Override's own window has already elapsed, so there is nothing left to run.
++        case alreadyElapsed
++    }
++
++    enum Decision: Equatable {
++        /// Start it. `trimmedDurationMinutes` is nil for an indefinite Override; otherwise it is
++        /// the duration shortened so the Override still ends when originally intended.
++        case activate(trimmedDurationMinutes: Decimal?)
++        case drop(DropReason)
++
++        var isActivate: Bool {
++            if case .activate = self { return true }
++            return false
++        }
++    }
++
++    static func decide(
++        scheduledStart: Date,
++        now: Date,
++        durationMinutes: Decimal,
++        indefinite: Bool,
++        grace: TimeInterval
++    ) -> Decision {
++        let lateness = max(0, now.timeIntervalSince(scheduledStart))
++
++        guard lateness <= grace else { return .drop(.tooStale) }
++        guard !indefinite else { return .activate(trimmedDurationMinutes: nil) }
++
++        let remaining = durationMinutes - Decimal(lateness / 60)
++        guard remaining > 0 else { return .drop(.alreadyElapsed) }
++        return .activate(trimmedDurationMinutes: remaining)
++    }
++}
++
++final class BaseScheduledOverrideManager: ScheduledOverrideManager, Injectable {
++    @Injected() private var overrideStorage: OverrideStorage!
++    @Injected() private var tempTargetStorage: TempTargetsStorage!
++
++    private let viewContext = CoreDataStack.shared.persistentContainer.viewContext
++
++    /// How late a scheduled Override may start and still be activated.
++    ///
++    /// The glucose pulse runs roughly every 5 minutes, so a normal overnight activation lands well
++    /// inside this. The window only binds when Trio genuinely was not running — an extended CGM
++    /// gap, or the phone being off — which is exactly when starting a dosing change the user has
++    /// mentally moved past is the wrong thing to do.
++    static let activationGracePeriod: TimeInterval = 15 * 60
++
++    init(resolver: Resolver) {
++        injectServices(resolver)
++    }
++
++    func catchUpOnDueScheduledOverrides() async {
++        do {
++            let now = Date()
++            let dueIDs = try await overrideStorage.fetchDueScheduledOverrides(asOf: now)
++            guard !dueIDs.isEmpty else { return }
++
++            // Oldest first. Decide the single winner before mutating anything: if several came due
++            // while the app was down, only the most recent one that is still inside the grace
++            // window should start — the earlier ones have been superseded.
++            let winnerID = try await lastActivatableID(from: dueIDs, now: now)
++
++            for id in dueIDs where id != winnerID {
++                await drop(id, now: now)
++            }
++
++            if let winnerID {
++                await activate(winnerID, now: now)
++            }
++        } catch {
++            debug(
++                .default,
++                "\(DebuggingIdentifiers.failed) Failed to catch up on scheduled overrides: \(error)"
++            )
++        }
++    }
++
++    /// The newest due Override the policy says to start. Nil when every due Override is too stale
++    /// or would already have finished.
++    @MainActor private func lastActivatableID(from ids: [NSManagedObjectID], now: Date) throws -> NSManagedObjectID? {
++        try ids.last { id in
++            guard let override = try viewContext.existingObject(with: id) as? OverrideStored else { return false }
++            return decision(for: override, now: now).isActivate
++        }
++    }
++
++    @MainActor private func decision(for override: OverrideStored, now: Date) -> ScheduledOverrideCatchUp.Decision {
++        guard let scheduledStart = override.date else { return .drop(.tooStale) }
++        return ScheduledOverrideCatchUp.decide(
++            scheduledStart: scheduledStart,
++            now: now,
++            durationMinutes: (override.duration ?? 0).decimalValue,
++            indefinite: override.indefinite,
++            grace: Self.activationGracePeriod
++        )
++    }
++
++    @MainActor private func activate(_ id: NSManagedObjectID, now: Date) async {
++        do {
++            guard let override = try viewContext.existingObject(with: id) as? OverrideStored,
++                  let scheduledStart = override.date else { return }
++
++            let lateness = now.timeIntervalSince(scheduledStart)
++
++            guard case let .activate(trimmed) = decision(for: override, now: now) else {
++                await drop(id, now: now)
++                return
++            }
++
++            await disableActiveOverrides()
++
++            if let trimmed {
++                override.duration = NSDecimalNumber(decimal: trimmed)
++            }
++
++            override.enabled = true
++            override.date = now
++            override.isScheduled = false // no longer pending — it has started
++            override.isUploadedToNS = false
++
++            guard viewContext.hasChanges else { return }
++            try viewContext.save()
++
++            debug(
++                .default,
++                "\(DebuggingIdentifiers.succeeded) Activated scheduled override '\(override.name ?? "")' " +
++                    "\(Int(lateness / 60)) min after its scheduled start"
++            )
++
++            Foundation.NotificationCenter.default.post(name: .didUpdateOverrideConfiguration, object: nil)
++        } catch {
++            debug(
++                .default,
++                "\(DebuggingIdentifiers.failed) Failed to activate due scheduled override: \(error)"
++            )
++        }
++    }
++
++    /// Clears the pending flag without starting the Override, and tells the user when it was
++    /// genuinely missed. Silence is what made the original bug invisible, so a missed Override
++    /// always notifies; one merely superseded by a newer Override that did start does not.
++    @MainActor private func drop(_ id: NSManagedObjectID, now: Date) async {
++        do {
++            guard let override = try viewContext.existingObject(with: id) as? OverrideStored,
++                  let scheduledStart = override.date else { return }
++
++            let name = override.name ?? String(localized: "Custom Override")
++            // An Override the policy would have started, but which a newer due Override replaced.
++            let wasSuperseded = decision(for: override, now: now).isActivate
++
++            override.isScheduled = false
++
++            if viewContext.hasChanges {
++                try viewContext.save()
++            }
++
++            debug(
++                .default,
++                "\(DebuggingIdentifiers.inProgress) Skipped scheduled override '\(name)' — " +
++                    "\(Int(now.timeIntervalSince(scheduledStart) / 60)) min late, superseded: \(wasSuperseded)"
++            )
++
++            if !wasSuperseded {
++                await notifyMissed(name: name, scheduledStart: scheduledStart)
++            }
++        } catch {
++            debug(
++                .default,
++                "\(DebuggingIdentifiers.failed) Failed to drop stale scheduled override: \(error)"
++            )
++        }
++    }
++
++    /// Disables any currently running Override and records a run entry, so the newly activated
++    /// Override does not stack on top of one already in effect.
++    @MainActor private func disableActiveOverrides() async {
++        do {
++            let activeIDs = try await overrideStorage.loadLatestOverrideConfigurations(fetchLimit: 0)
++            let active = try activeIDs.compactMap { try viewContext.existingObject(with: $0) as? OverrideStored }
++            guard !active.isEmpty else { return }
++
++            if let running = active.first {
++                let runEntry = OverrideRunStored(context: viewContext)
++                runEntry.id = UUID()
++                runEntry.name = running.name
++                runEntry.startDate = running.date ?? .distantPast
++                runEntry.endDate = Date()
++                runEntry.target = NSDecimalNumber(decimal: overrideStorage.calculateTarget(override: running))
++                runEntry.override = running
++                runEntry.isUploadedToNS = false
++            }
++
++            for override in active {
++                override.enabled = false
++            }
++
++            if viewContext.hasChanges {
++                try viewContext.save()
++            }
++        } catch {
++            debug(
++                .default,
++                "\(DebuggingIdentifiers.failed) Failed to disable active overrides during catch-up: \(error)"
++            )
++        }
++    }
++
++    // MARK: - Temp Targets
++
++    func catchUpOnDueScheduledTempTargets() async {
++        do {
++            let now = Date()
++            let dueIDs = try await tempTargetStorage.fetchDueScheduledTempTargets(asOf: now)
++            guard !dueIDs.isEmpty else { return }
++
++            let winnerID = try await lastActivatableTempTargetID(from: dueIDs, now: now)
++
++            for id in dueIDs where id != winnerID {
++                await dropTempTarget(id, now: now)
++            }
++
++            if let winnerID {
++                await activateTempTarget(winnerID, now: now)
++            }
++        } catch {
++            debug(
++                .default,
++                "\(DebuggingIdentifiers.failed) Failed to catch up on scheduled temp targets: \(error)"
++            )
++        }
++    }
++
++    @MainActor private func lastActivatableTempTargetID(
++        from ids: [NSManagedObjectID],
++        now: Date
++    ) throws -> NSManagedObjectID? {
++        try ids.last { id in
++            guard let tempTarget = try viewContext.existingObject(with: id) as? TempTargetStored else { return false }
++            return decision(for: tempTarget, now: now).isActivate
++        }
++    }
++
++    @MainActor private func decision(for tempTarget: TempTargetStored, now: Date) -> ScheduledOverrideCatchUp.Decision {
++        guard let scheduledStart = tempTarget.date else { return .drop(.tooStale) }
++        return ScheduledOverrideCatchUp.decide(
++            scheduledStart: scheduledStart,
++            now: now,
++            durationMinutes: (tempTarget.duration ?? 0).decimalValue,
++            indefinite: false, // Temp Targets always carry a duration
++            grace: Self.activationGracePeriod
++        )
++    }
++
++    @MainActor private func activateTempTarget(_ id: NSManagedObjectID, now: Date) async {
++        do {
++            guard let tempTarget = try viewContext.existingObject(with: id) as? TempTargetStored,
++                  let scheduledStart = tempTarget.date else { return }
++
++            guard case let .activate(trimmed) = decision(for: tempTarget, now: now) else {
++                await dropTempTarget(id, now: now)
++                return
++            }
++
++            await disableActiveTempTargets()
++
++            if let trimmed {
++                tempTarget.duration = NSDecimalNumber(decimal: trimmed)
++            }
++
++            tempTarget.enabled = true
++            tempTarget.date = now
++            tempTarget.isScheduled = false
++            tempTarget.isUploadedToNS = false
++
++            guard viewContext.hasChanges else { return }
++            try viewContext.save()
++
++            debug(
++                .default,
++                "\(DebuggingIdentifiers.succeeded) Activated scheduled temp target '\(tempTarget.name ?? "")' " +
++                    "\(Int(now.timeIntervalSince(scheduledStart) / 60)) min after its scheduled start"
++            )
++
++            Foundation.NotificationCenter.default.post(name: .didUpdateTempTargetConfiguration, object: nil)
++        } catch {
++            debug(
++                .default,
++                "\(DebuggingIdentifiers.failed) Failed to activate due scheduled temp target: \(error)"
++            )
++        }
++    }
++
++    @MainActor private func dropTempTarget(_ id: NSManagedObjectID, now: Date) async {
++        do {
++            guard let tempTarget = try viewContext.existingObject(with: id) as? TempTargetStored,
++                  let scheduledStart = tempTarget.date else { return }
++
++            let name = tempTarget.name ?? String(localized: "Temp Target")
++            let wasSuperseded = decision(for: tempTarget, now: now).isActivate
++
++            tempTarget.isScheduled = false
++
++            if viewContext.hasChanges {
++                try viewContext.save()
++            }
++
++            if !wasSuperseded {
++                await notifyMissed(name: name, scheduledStart: scheduledStart)
++            }
++        } catch {
++            debug(
++                .default,
++                "\(DebuggingIdentifiers.failed) Failed to drop stale scheduled temp target: \(error)"
++            )
++        }
++    }
++
++    @MainActor private func disableActiveTempTargets() async {
++        do {
++            let activeIDs = try await tempTargetStorage.loadLatestTempTargetConfigurations(fetchLimit: 0)
++            let active = try activeIDs.compactMap { try viewContext.existingObject(with: $0) as? TempTargetStored }
++            guard !active.isEmpty else { return }
++
++            if let running = active.first {
++                let runEntry = TempTargetRunStored(context: viewContext)
++                runEntry.id = UUID()
++                runEntry.name = running.name
++                runEntry.startDate = running.date ?? .distantPast
++                runEntry.endDate = Date()
++                runEntry.target = running.target
++                runEntry.tempTarget = running
++                runEntry.isUploadedToNS = false
++            }
++
++            for tempTarget in active {
++                tempTarget.enabled = false
++            }
++
++            if viewContext.hasChanges {
++                try viewContext.save()
++            }
++        } catch {
++            debug(
++                .default,
++                "\(DebuggingIdentifiers.failed) Failed to disable active temp targets during catch-up: \(error)"
++            )
++        }
++    }
++
++    // MARK: - Notification
++
++    private func notifyMissed(name: String, scheduledStart: Date) async {
++        let content = UNMutableNotificationContent()
++        content.title = String(localized: "Scheduled Override Did Not Start")
++        content.body = String(
++            localized: "\(name) was scheduled for \(DateFormatter.localizedString(from: scheduledStart, dateStyle: .none, timeStyle: .short)) but Trio was not running. It has not been started."
++        )
++        content.sound = .default
++
++        let request = UNNotificationRequest(
++            identifier: "missedScheduledOverride-\(scheduledStart.timeIntervalSince1970)",
++            content: content,
++            trigger: nil // deliver immediately
++        )
++
++        try? await UNUserNotificationCenter.current().add(request)
++    }
++}
+diff --git a/Trio/Sources/APS/Storage/CarbsStorage.swift b/Trio/Sources/APS/Storage/CarbsStorage.swift
+index 821023bfb..016b72b48 100644
+--- a/Trio/Sources/APS/Storage/CarbsStorage.swift
++++ b/Trio/Sources/APS/Storage/CarbsStorage.swift
+@@ -278,23 +278,34 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
+     }
+ 
+     private func saveCarbsToCoreData(entries: [CarbsEntry], areFetchedFromRemote: Bool) async {
+-        guard let entry = entries.last else { return }
++        // Every entry gets a row. This previously stored `entries.last` only, so a poll that
++        // returned several new remote carb entries persisted just one of them and understated COB.
++        //
++        // `storeCarbs` appends a synthesized non-FPU twin for each fat/protein-only entry, and that
++        // twin would otherwise be written alongside its original as a duplicate. `CarbsEntry`
++        // defines equality by `createdAt`, which the twin shares with its original, so filtering on
++        // the type's own identity collapses the pair while keeping genuinely distinct meals.
++        var seen = Set<CarbsEntry>()
++        let uniqueEntries = entries.filter { seen.insert($0).inserted }
++        guard !uniqueEntries.isEmpty else { return }
+ 
+         await context.perform {
+-            let newItem = CarbEntryStored(context: self.context)
+-            newItem.date = entry.actualDate ?? entry.createdAt
+-            newItem.carbs = Double(truncating: NSDecimalNumber(decimal: entry.carbs))
+-            newItem.fat = Double(truncating: NSDecimalNumber(decimal: entry.fat ?? 0))
+-            newItem.protein = Double(truncating: NSDecimalNumber(decimal: entry.protein ?? 0))
+-            newItem.note = entry.note
+-            newItem.id = UUID()
+-            newItem.isFPU = false
+-            newItem.isUploadedToNS = areFetchedFromRemote ? true : false
+-            newItem.isUploadedToHealth = false
+-            newItem.isUploadedToTidepool = false
+-
+-            if entry.fat != nil, entry.protein != nil, let fpuId = entry.fpuID {
+-                newItem.fpuID = UUID(uuidString: fpuId)
++            for entry in uniqueEntries {
++                let newItem = CarbEntryStored(context: self.context)
++                newItem.date = entry.actualDate ?? entry.createdAt
++                newItem.carbs = Double(truncating: NSDecimalNumber(decimal: entry.carbs))
++                newItem.fat = Double(truncating: NSDecimalNumber(decimal: entry.fat ?? 0))
++                newItem.protein = Double(truncating: NSDecimalNumber(decimal: entry.protein ?? 0))
++                newItem.note = entry.note
++                newItem.id = UUID()
++                newItem.isFPU = false
++                newItem.isUploadedToNS = areFetchedFromRemote ? true : false
++                newItem.isUploadedToHealth = false
++                newItem.isUploadedToTidepool = false
++
++                if entry.fat != nil, entry.protein != nil, let fpuId = entry.fpuID {
++                    newItem.fpuID = UUID(uuidString: fpuId)
++                }
+             }
+ 
+             do {
+diff --git a/Trio/Sources/APS/Storage/OverrideStorage.swift b/Trio/Sources/APS/Storage/OverrideStorage.swift
+index f9703d6df..bdb84058c 100644
+--- a/Trio/Sources/APS/Storage/OverrideStorage.swift
++++ b/Trio/Sources/APS/Storage/OverrideStorage.swift
+@@ -20,6 +20,7 @@ protocol OverrideStorage {
+     func getPresetOverridesForNightscout() async throws -> [NightscoutPresetOverride]
+     func fetchLatestActiveOverride() async throws -> NSManagedObjectID?
+     func fetchScheduledOverrides() async throws -> [NSManagedObjectID]
++    func fetchDueScheduledOverrides(asOf date: Date) async throws -> [NSManagedObjectID]
+     func fetchScheduledOverride(for date: Date) async throws -> [NSManagedObjectID]
+ }
+ 
+@@ -129,6 +130,7 @@ final class BaseOverrideStorage: @preconcurrency OverrideStorage, Injectable {
+             newOverride.id = UUID().uuidString
+             newOverride.date = override.date
+             newOverride.isPreset = override.isPreset
++            newOverride.isScheduled = override.isScheduled
+             newOverride.isUploadedToNS = false
+ 
+             // Assign orderPosition if it's a preset and presetCount is valid
+@@ -181,6 +183,7 @@ final class BaseOverrideStorage: @preconcurrency OverrideStorage, Injectable {
+         newOverride.smbIsOff = override.smbIsOff
+         newOverride.name = override.name
+         newOverride.isPreset = false // no Preset
++        newOverride.isScheduled = false // a copy of a running Override is already started
+         newOverride.date = override.date?
+             .addingTimeInterval(
+                 1.seconds
+@@ -410,12 +413,14 @@ final class BaseOverrideStorage: @preconcurrency OverrideStorage, Injectable {
+         }
+     }
+ 
++    /// Scheduled Overrides that have not started yet, for display and for re-arming timers.
+     func fetchScheduledOverrides() async throws -> [NSManagedObjectID] {
+         let results = try await CoreDataStack.shared.fetchEntitiesAsync(
+             ofType: OverrideStored.self,
+             onContext: context,
+             predicate: NSPredicate(
+-                format: "enabled == %@ AND isPreset == %@ AND date > %@",
++                format: "isScheduled == %@ AND enabled == %@ AND isPreset == %@ AND date > %@",
++                true as NSNumber,
+                 false as NSNumber,
+                 false as NSNumber,
+                 Date() as NSDate
+@@ -431,6 +436,33 @@ final class BaseOverrideStorage: @preconcurrency OverrideStorage, Injectable {
+         }
+     }
+ 
++    /// Scheduled Overrides whose start time has arrived or passed and which never activated.
++    ///
++    /// This is the catch-up query: it deliberately has no `date > now` bound, because the whole
++    /// point is to find Overrides that were missed while the app was not running. `isScheduled`
++    /// is what keeps a cancelled Override — identical in every other respect — out of the results.
++    func fetchDueScheduledOverrides(asOf date: Date) async throws -> [NSManagedObjectID] {
++        let results = try await CoreDataStack.shared.fetchEntitiesAsync(
++            ofType: OverrideStored.self,
++            onContext: context,
++            predicate: NSPredicate(
++                format: "isScheduled == %@ AND enabled == %@ AND isPreset == %@ AND date <= %@",
++                true as NSNumber,
++                false as NSNumber,
++                false as NSNumber,
++                date as NSDate
++            ),
++            key: "date",
++            ascending: true
++        )
++        return try await context.perform {
++            guard let fetchedResults = results as? [OverrideStored] else {
++                throw CoreDataError.fetchError(function: #function, file: #file)
++            }
++            return fetchedResults.map(\.objectID)
++        }
++    }
++
+     func fetchScheduledOverride(for date: Date) async throws -> [NSManagedObjectID] {
+         let tolerance: TimeInterval = 1.0
+         let lower = date.addingTimeInterval(-tolerance)
+@@ -439,7 +471,8 @@ final class BaseOverrideStorage: @preconcurrency OverrideStorage, Injectable {
+             ofType: OverrideStored.self,
+             onContext: context,
+             predicate: NSPredicate(
+-                format: "enabled == %@ AND isPreset == %@ AND date >= %@ AND date <= %@",
++                format: "isScheduled == %@ AND enabled == %@ AND isPreset == %@ AND date >= %@ AND date <= %@",
++                true as NSNumber,
+                 false as NSNumber,
+                 false as NSNumber,
+                 lower as NSDate,
+diff --git a/Trio/Sources/APS/Storage/PumpHistoryStorage.swift b/Trio/Sources/APS/Storage/PumpHistoryStorage.swift
+index 14c3a1b3f..21f1c04f1 100644
+--- a/Trio/Sources/APS/Storage/PumpHistoryStorage.swift
++++ b/Trio/Sources/APS/Storage/PumpHistoryStorage.swift
+@@ -274,8 +274,11 @@ final class BasePumpHistoryStorage: PumpHistoryStorage, Injectable {
+             onContext: context,
+             predicate: NSPredicate.pumpHistoryLast24h,
+             key: "timestamp",
+-            ascending: false,
+-            fetchLimit: 288
++            ascending: false
++            // No fetch limit: this feeds TDD, which needs the whole 24h window. A 288 cap assumed
++            // one event per 5-minute loop, but SMBs, suspends, primes and site changes push a real
++            // day well past that — so the newest 288 rows covered only part of the day and TDD was
++            // understated, which in turn biases dynamic ISF.
+         )
+ 
+         return await context.perform {
+diff --git a/Trio/Sources/APS/Storage/TDDStorage.swift b/Trio/Sources/APS/Storage/TDDStorage.swift
+index befdf4f7d..85e8723b3 100644
+--- a/Trio/Sources/APS/Storage/TDDStorage.swift
++++ b/Trio/Sources/APS/Storage/TDDStorage.swift
+@@ -265,7 +265,12 @@ final class BaseTDDStorage: TDDStorage, Injectable {
+                 let durationMinutes = max(0, actualEnd.timeIntervalSince(actualStart) / 60)
+                 if durationMinutes > 0, let rate = event.rate {
+                     let durationHours = (Decimal(durationMinutes) / 60).truncated(toPlaces: 5)
+-                    let insulin = Decimal(roundToSupportedBasalRate(Double(rate * durationHours)))
++                    // `rate * durationHours` is a quantity in units, not a rate. It used to be passed
++                // through `roundToSupportedBasalRate(unitsPerHour:)`, which rounds down to the
++                // pump's nearest supported *rate* — so a 5-minute segment (~1/12 h) floored toward
++                // zero and its insulin was dropped from the daily total. A TDD sum wants the true
++                // integral of rate over time, so no quantization belongs here.
++                let insulin = rate * durationHours
+                     if insulin > 0 {
+                         totalInsulin += insulin
+ 
+@@ -330,7 +335,12 @@ final class BaseTDDStorage: TDDStorage, Injectable {
+                 guard endTime > currentTime else { break }
+ 
+                 let durationHours = (Decimal(endTime.timeIntervalSince(currentTime)) / 3600).truncated(toPlaces: 5)
+-                let insulin = Decimal(roundToSupportedBasalRate(Double(rate * durationHours)))
++                // `rate * durationHours` is a quantity in units, not a rate. It used to be passed
++                // through `roundToSupportedBasalRate(unitsPerHour:)`, which rounds down to the
++                // pump's nearest supported *rate* — so a 5-minute segment (~1/12 h) floored toward
++                // zero and its insulin was dropped from the daily total. A TDD sum wants the true
++                // integral of rate over time, so no quantization belongs here.
++                let insulin = rate * durationHours
+ 
+                 if insulin > 0 {
+                     totalInsulin += insulin
+@@ -497,7 +507,12 @@ final class BaseTDDStorage: TDDStorage, Injectable {
+     //                let endTime = min(nextSwitchTime, gap.end)
+     //                let durationHours = Decimal(endTime.timeIntervalSince(currentTime)) / 3600
+     //
+-    //                let insulin = Decimal(roundToSupportedBasalRate(Double(rate * durationHours)))
++    //                // `rate * durationHours` is a quantity in units, not a rate. It used to be passed
++                // through `roundToSupportedBasalRate(unitsPerHour:)`, which rounds down to the
++                // pump's nearest supported *rate* — so a 5-minute segment (~1/12 h) floored toward
++                // zero and its insulin was dropped from the daily total. A TDD sum wants the true
++                // integral of rate over time, so no quantization belongs here.
++                let insulin = rate * durationHours
+     //                totalInsulin += insulin
+     //
+     //                debug(
+diff --git a/Trio/Sources/APS/Storage/TempTargetsStorage.swift b/Trio/Sources/APS/Storage/TempTargetsStorage.swift
+index cb003d7be..76291b3f2 100644
+--- a/Trio/Sources/APS/Storage/TempTargetsStorage.swift
++++ b/Trio/Sources/APS/Storage/TempTargetsStorage.swift
+@@ -12,6 +12,7 @@ protocol TempTargetsStorage {
+     func saveTempTargetsToStorage(_ targets: [TempTarget])
+     func fetchForTempTargetPresets() async throws -> [NSManagedObjectID]
+     func fetchScheduledTempTargets() async throws -> [NSManagedObjectID]
++    func fetchDueScheduledTempTargets(asOf date: Date) async throws -> [NSManagedObjectID]
+     func fetchScheduledTempTarget(for targetDate: Date) async throws -> [NSManagedObjectID]
+     @MainActor func copyRunningTempTarget(_ tempTarget: TempTargetStored) async -> NSManagedObjectID
+     func deleteTempTargetPreset(_ objectID: NSManagedObjectID) async
+@@ -78,9 +79,10 @@ final class BaseTempTargetsStorage: TempTargetsStorage, Injectable {
+         }
+     }
+ 
++    /// Scheduled Temp Targets that have not started yet, for display and for re-arming timers.
+     func fetchScheduledTempTargets() async throws -> [NSManagedObjectID] {
+         let scheduledTempTargets = NSPredicate(
+-            format: "date > %@ AND enabled == false AND isPreset == false",
++            format: "isScheduled == YES AND date > %@ AND enabled == false AND isPreset == false",
+             Date() as NSDate
+         )
+ 
+@@ -101,10 +103,40 @@ final class BaseTempTargetsStorage: TempTargetsStorage, Injectable {
+         }
+     }
+ 
++    /// Scheduled Temp Targets whose start time has arrived or passed and which never activated.
++    /// No `date > now` bound — the point is to find ones missed while the app was not running.
++    /// `isScheduled` is what keeps a cancelled Temp Target out of the results.
++    func fetchDueScheduledTempTargets(asOf date: Date) async throws -> [NSManagedObjectID] {
++        let predicate = NSPredicate(
++            format: "isScheduled == YES AND date <= %@ AND enabled == false AND isPreset == false",
++            date as NSDate
++        )
++
++        let results = try await CoreDataStack.shared.fetchEntitiesAsync(
++            ofType: TempTargetStored.self,
++            onContext: context,
++            predicate: predicate,
++            key: "date",
++            ascending: true
++        )
++
++        return try await context.perform {
++            guard let fetchedResults = results as? [TempTargetStored] else {
++                throw CoreDataError.fetchError(function: #function, file: #file)
++            }
++
++            return fetchedResults.map(\.objectID)
++        }
++    }
++
+     func fetchScheduledTempTarget(for targetDate: Date) async throws -> [NSManagedObjectID] {
+         let lower = targetDate.addingTimeInterval(-1)
+         let upper = targetDate.addingTimeInterval(1)
+-        let predicate = NSPredicate(format: "date >= %@ AND date <= %@", lower as NSDate, upper as NSDate)
++        let predicate = NSPredicate(
++            format: "isScheduled == YES AND date >= %@ AND date <= %@",
++            lower as NSDate,
++            upper as NSDate
++        )
+ 
+         let results = try await CoreDataStack.shared.fetchEntitiesAsync(
+             ofType: TempTargetStored.self,
+@@ -141,6 +173,7 @@ final class BaseTempTargetsStorage: TempTargetsStorage, Injectable {
+             newTempTarget.name = tempTarget.name
+             newTempTarget.target = NSDecimalNumber(decimal: tempTarget.targetTop ?? 0)
+             newTempTarget.isPreset = tempTarget.isPreset ?? false
++            newTempTarget.isScheduled = tempTarget.isScheduled
+             newTempTarget.enteredBy = tempTarget.enteredBy
+ 
+             // Nullify half basal target to ensure the latest HBT is used via OpenAPS Manager when sending TT data to oref
+diff --git a/Trio/Sources/Assemblies/APSAssembly.swift b/Trio/Sources/Assemblies/APSAssembly.swift
+index 0f0672694..c64c65da1 100644
+--- a/Trio/Sources/Assemblies/APSAssembly.swift
++++ b/Trio/Sources/Assemblies/APSAssembly.swift
+@@ -10,5 +10,7 @@ final class APSAssembly: Assembly {
+         container.register(BluetoothStateManager.self) { r in BaseBluetoothStateManager(resolver: r) }
+         container.register(PluginManager.self) { r in BasePluginManager(resolver: r) }
+         container.register(CalibrationService.self) { r in BaseCalibrationService(resolver: r) }
++        container.register(ScheduledOverrideManager.self) { r in BaseScheduledOverrideManager(resolver: r) }
++            .inObjectScope(.container)
+     }
+ }
+diff --git a/Trio/Sources/Models/Override.swift b/Trio/Sources/Models/Override.swift
+index 520055656..02d76fd96 100644
+--- a/Trio/Sources/Models/Override.swift
++++ b/Trio/Sources/Models/Override.swift
+@@ -21,4 +21,8 @@ struct Override {
+     let end: Decimal
+     let smbMinutes: Decimal
+     let uamMinutes: Decimal
++    /// True only for an Override created by "Schedule Override" that has not started yet.
++    /// Cleared once the Override is activated, so a finished or cancelled Override is never
++    /// mistaken for one still waiting to start.
++    var isScheduled: Bool = false
+ }
+diff --git a/Trio/Sources/Models/TempTarget.swift b/Trio/Sources/Models/TempTarget.swift
+index a5e2b04c3..7af6e7704 100644
+--- a/Trio/Sources/Models/TempTarget.swift
++++ b/Trio/Sources/Models/TempTarget.swift
+@@ -12,6 +12,8 @@ struct TempTarget: JSON, Identifiable, Equatable, Hashable {
+     let isPreset: Bool?
+     var enabled: Bool?
+     let halfBasalTarget: Decimal?
++    /// True only for a Temp Target scheduled to start later that has not started yet.
++    var isScheduled: Bool = false
+ 
+     static let local = "Trio"
+     static let custom = "Temp Target"
+diff --git a/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel+Extensions/AdjustmentsStateModel+Overrides.swift b/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel+Extensions/AdjustmentsStateModel+Overrides.swift
+index 1c154c412..d37498903 100644
+--- a/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel+Extensions/AdjustmentsStateModel+Overrides.swift
++++ b/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel+Extensions/AdjustmentsStateModel+Overrides.swift
+@@ -433,6 +433,7 @@ extension Adjustments.StateModel {
+                 guard let override = try viewContext.existingObject(with: firstID) as? OverrideStored else { return }
+                 override.enabled = true
+                 override.date = Date()
++                override.isScheduled = false // it has started; no longer pending
+                 override.isUploadedToNS = false
+                 isOverrideEnabled = true
+                 try viewContext.save()
+@@ -446,7 +447,15 @@ extension Adjustments.StateModel {
+     }
+ 
+     func cancelScheduledOverride(_ objectID: NSManagedObjectID) async {
+-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["scheduledOverrideActivation"])
++        // Remove only this Override's own notification. The identifier used to be a single shared
++        // constant, so cancelling one scheduled Override silently cancelled every other one's
++        // notification too (and scheduling a second replaced the first's).
++        if let override = try? viewContext.existingObject(with: objectID) as? OverrideStored,
++           let scheduledDate = override.date
++        {
++            UNUserNotificationCenter.current()
++                .removePendingNotificationRequests(withIdentifiers: [Self.activationNotificationID(for: scheduledDate)])
++        }
+         scheduledOverrideTasks[objectID]?.cancel()
+         scheduledOverrideTasks.removeValue(forKey: objectID)
+         await overrideStorage.deleteOverridePreset(objectID)
+@@ -475,6 +484,12 @@ extension Adjustments.StateModel {
+         }
+     }
+ 
++    /// Unique per scheduled start time, so multiple scheduled Overrides do not overwrite or cancel
++    /// each other's notifications.
++    static func activationNotificationID(for scheduledDate: Date) -> String {
++        "scheduledOverrideActivation-\(scheduledDate.timeIntervalSince1970)"
++    }
++
+     private func sendScheduledOverrideActivationNotification(name: String, scheduledDate: Date) async {
+         let content = UNMutableNotificationContent()
+         content.title = String(localized: "Override Scheduled")
+@@ -488,7 +503,7 @@ extension Adjustments.StateModel {
+         let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+ 
+         let request = UNNotificationRequest(
+-            identifier: "scheduledOverrideActivation",
++            identifier: Self.activationNotificationID(for: scheduledDate),
+             content: content,
+             trigger: trigger
+         )
+diff --git a/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel+Extensions/AdjustmentsStateModel+TempTargets.swift b/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel+Extensions/AdjustmentsStateModel+TempTargets.swift
+index 6332fdc12..51a1b7de8 100644
+--- a/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel+Extensions/AdjustmentsStateModel+TempTargets.swift
++++ b/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel+Extensions/AdjustmentsStateModel+TempTargets.swift
+@@ -150,7 +150,8 @@ extension Adjustments.StateModel {
+             reason: TempTarget.custom,
+             isPreset: false,
+             enabled: false,
+-            halfBasalTarget: halfBasalTarget
++            halfBasalTarget: halfBasalTarget,
++            isScheduled: true
+         )
+ 
+         try await tempTargetStorage.storeTempTarget(tempTarget: tempTarget)
+@@ -180,6 +181,12 @@ extension Adjustments.StateModel {
+                 debug(.default, "No Temp Target found for the specified date.")
+                 return
+             }
++            // Displace whatever is currently running before enabling this one, matching
++            // `saveCustomTempTarget` and `enactTempTargetPreset`. Without this, two rows were left
++            // `enabled == true`; the algorithm selects the newest `date` with a fetch limit of one,
++            // and because the scheduled row kept its original (older) start time it lost that
++            // comparison — so dosing silently ignored it while the UI showed it as active.
++            await disableAllActiveTempTargets(createTempTargetRunEntry: true)
+             await setCurrentTempTarget(from: ids)
+ 
+             try await MainActor.run {
+@@ -192,6 +199,8 @@ extension Adjustments.StateModel {
+                 }
+ 
+                 tempTarget.enabled = true
++                tempTarget.isScheduled = false // it has started; no longer pending
++                tempTarget.date = Date() // start now, so it wins the newest-date selection
+                 try viewContext.save()
+                 isTempTargetEnabled = true
+             }
+@@ -207,7 +216,17 @@ extension Adjustments.StateModel {
+ 
+     /// Cancels a scheduled Temp Target and removes it from storage.
+     func cancelScheduledTempTarget(_ objectID: NSManagedObjectID) async {
+-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["scheduledTempTargetActivation"])
++        // Remove only this Temp Target's own notification. The identifier used to be a single
++        // shared constant, so cancelling one scheduled Temp Target silently cancelled every other
++        // one's notification too (and scheduling a second replaced the first's).
++        if let tempTarget = try? viewContext.existingObject(with: objectID) as? TempTargetStored,
++           let scheduledDate = tempTarget.date
++        {
++            UNUserNotificationCenter.current()
++                .removePendingNotificationRequests(
++                    withIdentifiers: [Self.tempTargetActivationNotificationID(for: scheduledDate)]
++                )
++        }
+         scheduledTempTargetTasks[objectID]?.cancel()
+         scheduledTempTargetTasks.removeValue(forKey: objectID)
+         await tempTargetStorage.deleteTempTargetPreset(objectID)
+@@ -236,6 +255,12 @@ extension Adjustments.StateModel {
+         }
+     }
+ 
++    /// Unique per scheduled start time, so multiple scheduled Temp Targets do not overwrite or
++    /// cancel each other's notifications.
++    static func tempTargetActivationNotificationID(for scheduledDate: Date) -> String {
++        "scheduledTempTargetActivation-\(scheduledDate.timeIntervalSince1970)"
++    }
++
+     /// Sends a local notification for a scheduled Temp Target activation.
+     func sendScheduledTempTargetNotification(name: String, scheduledDate: Date) async {
+         let content = UNMutableNotificationContent()
+@@ -253,7 +278,7 @@ extension Adjustments.StateModel {
+         )
+         let trigger = UNCalendarNotificationTrigger(dateMatching: triggerDate, repeats: false)
+         let request = UNNotificationRequest(
+-            identifier: "scheduledTempTargetActivation",
++            identifier: Self.tempTargetActivationNotificationID(for: scheduledDate),
+             content: content,
+             trigger: trigger
+         )
+diff --git a/Trio/Sources/Modules/Adjustments/View/Overrides/EditOverrideForm.swift b/Trio/Sources/Modules/Adjustments/View/Overrides/EditOverrideForm.swift
+index c3b208f0a..9f6305749 100644
+--- a/Trio/Sources/Modules/Adjustments/View/Overrides/EditOverrideForm.swift
++++ b/Trio/Sources/Modules/Adjustments/View/Overrides/EditOverrideForm.swift
+@@ -590,7 +590,8 @@ struct EditOverrideForm: View {
+                                 start: start ?? 0,
+                                 end: end ?? 0,
+                                 smbMinutes: smbMinutes ?? state.defaultSmbMinutes,
+-                                uamMinutes: uamMinutes ?? state.defaultUamMinutes
++                                uamMinutes: uamMinutes ?? state.defaultUamMinutes,
++                                isScheduled: true
+                             )
+                             try await state.overrideStorage.storeOverride(override: newOverride)
+ 
+diff --git a/Trio/Sources/Router/Screen.swift b/Trio/Sources/Router/Screen.swift
+index 038b08bed..ebc292149 100644
+--- a/Trio/Sources/Router/Screen.swift
++++ b/Trio/Sources/Router/Screen.swift
+@@ -167,10 +167,26 @@ extension Screen {
+         case .settingsExport:
+             SettingsExport.RootView(resolver: resolver)
+         case .manageMealPresets:
+-            ManageMealPresetsView(state: resolver.resolve(Treatments.StateModel.self)!)
++            ManageMealPresetsView(state: Screen.makeMealPresetsStateModel(resolver: resolver))
+         }
+     }
+ 
++    /// Builds the state model for the standalone meal-preset screen reached from Settings.
++    ///
++    /// No `StateModel` is registered with the container, so resolving one here returned nil and the
++    /// screen trapped on open. Constructed directly instead, matching `.tidepoolConfig` above.
++    ///
++    /// `isActive` is deliberately left false: `Treatments.StateModel.subscribe()` starts
++    /// bolus-progress subscriptions and determination observers intended for the live bolus screen,
++    /// and a second live copy of those is not wanted for preset management. Only the preset list
++    /// this view actually renders is populated.
++    private static func makeMealPresetsStateModel(resolver: Resolver) -> Treatments.StateModel {
++        let state = Treatments.StateModel()
++        state.resolver = resolver
++        state.setupMealPresetsArray()
++        return state
++    }
++
+     func modal(resolver: Resolver) -> Main.Modal {
+         .init(screen: self, view: view(resolver: resolver).asAny())
+     }
+diff --git a/Trio/Sources/Services/RemoteControl/TrioRemoteControl+Meal.swift b/Trio/Sources/Services/RemoteControl/TrioRemoteControl+Meal.swift
+index 6e67cb2eb..9e2f43419 100644
+--- a/Trio/Sources/Services/RemoteControl/TrioRemoteControl+Meal.swift
++++ b/Trio/Sources/Services/RemoteControl/TrioRemoteControl+Meal.swift
+@@ -1,10 +1,17 @@
+ import Foundation
+ 
+ extension TrioRemoteControl {
+-    func handleMealCommand(_ payload: CommandPayload) async throws {
++    /// Handles a remote meal command.
++    ///
++    /// - Returns: `true` if the meal was logged, `false` if it was rejected. The caller must not
++    /// deliver an attached bolus for a rejected meal — previously every rejection path returned
++    /// normally, so a meal refused for exceeding its limits still delivered its full meal bolus
++    /// with no carbs on board.
++    @discardableResult
++    func handleMealCommand(_ payload: CommandPayload) async throws -> Bool {
+         guard payload.carbs != nil || payload.fat != nil || payload.protein != nil else {
+             await logError("Command rejected: meal data is incomplete or invalid.", payload: payload)
+-            return
++            return false
+         }
+ 
+         let carbsDecimal = payload.carbs != nil ? Decimal(payload.carbs!) : nil
+@@ -21,18 +28,18 @@ extension TrioRemoteControl {
+                 "Command rejected: carbs amount (\(carbs)g) exceeds the maximum allowed (\(maxCarbs)g).",
+                 payload: payload
+             )
+-            return
++            return false
+         }
+         if let fat = fatDecimal, fat > maxFat {
+             await logError("Command rejected: fat amount (\(fat)g) exceeds the maximum allowed (\(maxFat)g).", payload: payload)
+-            return
++            return false
+         }
+         if let protein = proteinDecimal, protein > maxProtein {
+             await logError(
+                 "Command rejected: protein amount (\(protein)g) exceeds the maximum allowed (\(maxProtein)g).",
+                 payload: payload
+             )
+-            return
++            return false
+         }
+ 
+         let payloadDate = Date(timeIntervalSince1970: payload.timestamp)
+@@ -44,17 +51,20 @@ extension TrioRemoteControl {
+             ), key: "date", ascending: false
+         )
+ 
+-        await taskContext.perform {
+-            guard let recentCarbEntries = results as? [CarbEntryStored] else { return }
+-            if !recentCarbEntries.isEmpty {
+-                Task {
+-                    await self.logError(
+-                        "Command rejected: newer carb entries have been logged since the command was sent.",
+-                        payload: payload
+-                    )
+-                    return
+-                }
+-            }
++        // Reject a replayed or duplicated command. The rejection used to be logged from inside a
++        // detached `Task`, whose `return` exited only that closure — so the command was logged as
++        // rejected and then stored anyway, doubling the carbs.
++        let hasNewerCarbEntries = await taskContext.perform {
++            guard let recentCarbEntries = results as? [CarbEntryStored] else { return false }
++            return !recentCarbEntries.isEmpty
++        }
++
++        if hasNewerCarbEntries {
++            await logError(
++                "Command rejected: newer carb entries have been logged since the command was sent.",
++                payload: payload
++            )
++            return false
+         }
+ 
+         let actualDate = payload.scheduledTime.map { Date(timeIntervalSince1970: $0) }
+@@ -75,5 +85,7 @@ extension TrioRemoteControl {
+                 customNotificationMessage: "Meal logged"
+             )
+         }
++
++        return true
+     }
+ }
+diff --git a/Trio/Sources/Services/RemoteControl/TrioRemoteControl.swift b/Trio/Sources/Services/RemoteControl/TrioRemoteControl.swift
+index 2797b7c9e..fda6326cb 100644
+--- a/Trio/Sources/Services/RemoteControl/TrioRemoteControl.swift
++++ b/Trio/Sources/Services/RemoteControl/TrioRemoteControl.swift
+@@ -79,8 +79,10 @@ class TrioRemoteControl: Injectable {
+         case .cancelTempTarget:
+             await cancelTempTarget(commandPayload)
+         case .meal:
+-            try await handleMealCommand(commandPayload)
+-            if commandPayload.bolusAmount != nil {
++            // Only deliver the attached bolus if the meal itself was accepted. A rejected meal
++            // used to fall through to the bolus, delivering a full meal dose with no carbs logged.
++            let mealWasLogged = try await handleMealCommand(commandPayload)
++            if mealWasLogged, commandPayload.bolusAmount != nil {
+                 try await handleBolusCommand(commandPayload)
+             }
+         case .startOverride:
+diff --git a/TrioTests/CoreDataTests/ScheduledOverrideTests.swift b/TrioTests/CoreDataTests/ScheduledOverrideTests.swift
+new file mode 100644
+index 000000000..33b3ddec2
+--- /dev/null
++++ b/TrioTests/CoreDataTests/ScheduledOverrideTests.swift
+@@ -0,0 +1,326 @@
++import CoreData
++import Foundation
++import Swinject
++import Testing
++
++@testable import Trio
++
++/// Tests for scheduled Override activation.
++///
++/// A scheduled Override is stored as an `OverrideStored` row with `enabled == false`,
++/// `isPreset == false`, `isScheduled == true` and `date` set to the intended start time.
++///
++/// The bug these cover: activation used to be driven by an in-process `Task.sleep` armed from
++/// `Adjustments.StateModel.subscribe()`, which only runs when the Adjustments screen appears. If
++/// the app was terminated and relaunched in the background, nothing re-armed it, the Override never
++/// started, and once its start time passed it was unreachable — the "scheduled overnight, did not
++/// fire in the morning" failure.
++///
++/// Two things fix it, and both are covered here: `isScheduled` makes a pending Override
++/// distinguishable from a cancelled one (so catch-up cannot resurrect a cancelled Override), and
++/// `fetchDueScheduledOverrides(asOf:)` finds past-due Overrides so an app-lifetime service can act
++/// on them.
++@Suite("Scheduled Override Tests", .serialized) struct ScheduledOverrideTests: Injectable {
++    @Injected() var storage: OverrideStorage!
++    let resolver: Resolver
++    var coreDataStack: CoreDataStack!
++    var testContext: NSManagedObjectContext!
++
++    init() async throws {
++        // As we are only using this single test context to initialize our in-memory OverrideStorage
++        // we need to perform the Unit Tests serialized
++        coreDataStack = try await CoreDataStack.createForTests()
++        testContext = coreDataStack.newTaskContext()
++
++        let assembler = Assembler([
++            StorageAssembly(),
++            ServiceAssembly(),
++            APSAssembly(),
++            NetworkAssembly(),
++            UIAssembly(),
++            SecurityAssembly(),
++            TestAssembly(testContext: testContext) // Add our test assembly last to override Storage
++        ])
++
++        resolver = assembler.resolver
++        injectServices(resolver)
++    }
++
++    /// Builds an Override in the shape `EditOverrideForm`'s "Schedule Override" button stores.
++    private func makeScheduledOverride(
++        name: String,
++        activationDate: Date,
++        durationMinutes: Decimal = 60,
++        indefinite: Bool = false
++    ) -> Override {
++        Override(
++            name: name,
++            enabled: false,
++            date: activationDate,
++            duration: durationMinutes,
++            indefinite: indefinite,
++            percentage: 130,
++            smbIsOff: false,
++            isPreset: false,
++            id: UUID().uuidString,
++            overrideTarget: true,
++            target: 110,
++            advancedSettings: false,
++            isfAndCr: true,
++            isf: true,
++            cr: true,
++            smbIsScheduledOff: false,
++            start: 0,
++            end: 0,
++            smbMinutes: 30,
++            uamMinutes: 30,
++            isScheduled: true
++        )
++    }
++
++    private func names(of ids: [NSManagedObjectID]) async throws -> [String] {
++        try await testContext.perform {
++            try ids.compactMap { id in
++                (try testContext.existingObject(with: id) as? OverrideStored)?.name
++            }
++        }
++    }
++
++    // MARK: - Pending vs. due
++
++    @Test("Pending scheduled override is discoverable before its activation time")
++    func testPendingScheduledOverrideIsDiscoverable() async throws {
++        let activationDate = Date().addingTimeInterval(60 * 60)
++        try await storage.storeOverride(override: makeScheduledOverride(
++            name: "Pending Override",
++            activationDate: activationDate
++        ))
++
++        let scheduledIDs = try await storage.fetchScheduledOverrides()
++        let foundNames = try await names(of: scheduledIDs)
++
++        #expect(scheduledIDs.count == 1, "A future-dated scheduled override should be listed as pending")
++        #expect(foundNames == ["Pending Override"], "Should find the pending override")
++    }
++
++    @Test("A pending scheduled override is not yet due")
++    func testPendingOverrideIsNotDue() async throws {
++        try await storage.storeOverride(override: makeScheduledOverride(
++            name: "Pending Override",
++            activationDate: Date().addingTimeInterval(60 * 60)
++        ))
++
++        let dueIDs = try await storage.fetchDueScheduledOverrides(asOf: Date())
++
++        #expect(dueIDs.isEmpty, "An override scheduled for the future must not be activated early")
++    }
++
++    // MARK: - The fix: missed overrides are recoverable
++
++    @Test("Scheduled override missed while the app was not running is found by catch-up")
++    func testMissedScheduledOverrideIsFoundByCatchUp() async throws {
++        // The app was terminated overnight; this override's start time passed with nothing running.
++        let missedActivationDate = Date().addingTimeInterval(-30 * 60)
++        try await storage.storeOverride(override: makeScheduledOverride(
++            name: "Missed Override",
++            activationDate: missedActivationDate
++        ))
++
++        // It is correctly no longer "pending"...
++        let pendingIDs = try await storage.fetchScheduledOverrides()
++        #expect(pendingIDs.isEmpty, "A past-due override is no longer pending")
++
++        // ...but the catch-up query, which has no `date > now` bound, still finds it. Previously
++        // nothing could reach it and it was stranded forever.
++        let dueIDs = try await storage.fetchDueScheduledOverrides(asOf: Date())
++        let dueNames = try await names(of: dueIDs)
++
++        #expect(dueIDs.count == 1, "A missed scheduled override must be recoverable by catch-up")
++        #expect(dueNames == ["Missed Override"], "Should find the missed override")
++    }
++
++    @Test("Catch-up never resurrects a cancelled override")
++    func testCatchUpIgnoresCancelledOverrides() async throws {
++        // A cancelled custom override: `enabled == false`, `isPreset == false`, past `date`.
++        // Identical to a missed scheduled override in every field except `isScheduled`.
++        try await storage.storeOverride(override: Override(
++            name: "Cancelled Override",
++            enabled: false,
++            date: Date().addingTimeInterval(-45 * 60),
++            duration: 60,
++            indefinite: false,
++            percentage: 80,
++            smbIsOff: false,
++            isPreset: false,
++            id: UUID().uuidString,
++            overrideTarget: true,
++            target: 120,
++            advancedSettings: false,
++            isfAndCr: true,
++            isf: true,
++            cr: true,
++            smbIsScheduledOff: false,
++            start: 0,
++            end: 0,
++            smbMinutes: 30,
++            uamMinutes: 30
++            // isScheduled defaults to false
++        ))
++
++        try await storage.storeOverride(override: makeScheduledOverride(
++            name: "Missed Override",
++            activationDate: Date().addingTimeInterval(-30 * 60)
++        ))
++
++        let dueIDs = try await storage.fetchDueScheduledOverrides(asOf: Date())
++        let dueNames = try await names(of: dueIDs)
++
++        // Without `isScheduled` both rows matched, and catch-up would have re-enabled an override
++        // the user had explicitly cancelled — unacceptable for dosing.
++        #expect(dueNames == ["Missed Override"], "Only the scheduled override is eligible for catch-up")
++    }
++}
++
++/// Scheduled Temp Targets had the identical defect, so they get the identical coverage.
++@Suite("Scheduled Temp Target Tests", .serialized) struct ScheduledTempTargetTests: Injectable {
++    @Injected() var storage: TempTargetsStorage!
++    let resolver: Resolver
++    var coreDataStack: CoreDataStack!
++    var testContext: NSManagedObjectContext!
++
++    init() async throws {
++        coreDataStack = try await CoreDataStack.createForTests()
++        testContext = coreDataStack.newTaskContext()
++
++        let assembler = Assembler([
++            StorageAssembly(),
++            ServiceAssembly(),
++            APSAssembly(),
++            NetworkAssembly(),
++            UIAssembly(),
++            SecurityAssembly(),
++            TestAssembly(testContext: testContext)
++        ])
++
++        resolver = assembler.resolver
++        injectServices(resolver)
++    }
++
++    private func makeTempTarget(name: String, at date: Date, isScheduled: Bool) -> TempTarget {
++        TempTarget(
++            name: name,
++            createdAt: date,
++            targetTop: 120,
++            targetBottom: 120,
++            duration: 60,
++            enteredBy: TempTarget.local,
++            reason: TempTarget.custom,
++            isPreset: false,
++            enabled: false,
++            halfBasalTarget: 160,
++            isScheduled: isScheduled
++        )
++    }
++
++    private func names(of ids: [NSManagedObjectID]) async throws -> [String] {
++        try await testContext.perform {
++            try ids.compactMap { id in
++                (try testContext.existingObject(with: id) as? TempTargetStored)?.name
++            }
++        }
++    }
++
++    @Test("Missed scheduled temp target is found by catch-up")
++    func testMissedScheduledTempTargetIsFoundByCatchUp() async throws {
++        try await storage.storeTempTarget(tempTarget: makeTempTarget(
++            name: "Missed TT",
++            at: Date().addingTimeInterval(-30 * 60),
++            isScheduled: true
++        ))
++
++        let pendingIDs = try await storage.fetchScheduledTempTargets()
++        #expect(pendingIDs.isEmpty, "A past-due temp target is no longer pending")
++
++        let dueIDs = try await storage.fetchDueScheduledTempTargets(asOf: Date())
++        let dueNames = try await names(of: dueIDs)
++
++        #expect(dueNames == ["Missed TT"], "A missed scheduled temp target must be recoverable by catch-up")
++    }
++
++    @Test("Catch-up never resurrects a cancelled temp target")
++    func testCatchUpIgnoresCancelledTempTargets() async throws {
++        try await storage.storeTempTarget(tempTarget: makeTempTarget(
++            name: "Cancelled TT",
++            at: Date().addingTimeInterval(-45 * 60),
++            isScheduled: false
++        ))
++        try await storage.storeTempTarget(tempTarget: makeTempTarget(
++            name: "Missed TT",
++            at: Date().addingTimeInterval(-30 * 60),
++            isScheduled: true
++        ))
++
++        let dueIDs = try await storage.fetchDueScheduledTempTargets(asOf: Date())
++        let dueNames = try await names(of: dueIDs)
++
++        #expect(dueNames == ["Missed TT"], "Only the scheduled temp target is eligible for catch-up")
++    }
++}
++
++/// The catch-up policy itself, exercised without Core Data.
++@Suite("Scheduled Override Catch-Up Policy") struct ScheduledOverrideCatchUpTests {
++    private let grace: TimeInterval = 15 * 60
++    private let now = Date()
++
++    private func decide(lateBy minutes: Double, duration: Decimal = 60, indefinite: Bool = false)
++        -> ScheduledOverrideCatchUp.Decision
++    {
++        ScheduledOverrideCatchUp.decide(
++            scheduledStart: now.addingTimeInterval(-minutes * 60),
++            now: now,
++            durationMinutes: duration,
++            indefinite: indefinite,
++            grace: grace
++        )
++    }
++
++    @Test("Activates on time with the full duration intact")
++    func testOnTimeActivation() {
++        #expect(decide(lateBy: 0) == .activate(trimmedDurationMinutes: 60))
++    }
++
++    @Test("Trims the duration so a late start still ends when originally intended")
++    func testLateActivationTrimsDuration() {
++        // Scheduled 6:00-7:00, started 6:05 → 55 minutes left, still ending at 7:00.
++        #expect(decide(lateBy: 5) == .activate(trimmedDurationMinutes: 55))
++    }
++
++    @Test("Activates just inside the grace window")
++    func testBoundaryInsideGrace() {
++        #expect(decide(lateBy: 15) == .activate(trimmedDurationMinutes: 45))
++    }
++
++    @Test("Drops an override that is past the grace window")
++    func testTooStaleIsDropped() {
++        // The overnight-gap case: too long unattended to start a dosing change now.
++        #expect(decide(lateBy: 16) == .drop(.tooStale))
++        #expect(decide(lateBy: 8 * 60) == .drop(.tooStale))
++    }
++
++    @Test("Drops an override whose own window already elapsed")
++    func testAlreadyElapsedIsDropped() {
++        // A 10-minute override started 12 minutes late has nothing left to run, even though 12
++        // minutes is inside the grace window.
++        #expect(decide(lateBy: 12, duration: 10) == .drop(.alreadyElapsed))
++    }
++
++    @Test("Indefinite overrides activate without trimming")
++    func testIndefiniteIsNotTrimmed() {
++        #expect(decide(lateBy: 10, duration: 0, indefinite: true) == .activate(trimmedDurationMinutes: nil))
++    }
++
++    @Test("An indefinite override past the grace window is still dropped")
++    func testIndefiniteStillRespectsGrace() {
++        #expect(decide(lateBy: 60, duration: 0, indefinite: true) == .drop(.tooStale))
++    }
++}

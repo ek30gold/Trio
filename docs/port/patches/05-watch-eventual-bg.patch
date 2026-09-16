@@ -1,0 +1,114 @@
+diff --git a/Trio Watch App Extension/Views/GlucoseTrendView.swift b/Trio Watch App Extension/Views/GlucoseTrendView.swift
+index 20b50f21f..b0e6b55d3 100644
+--- a/Trio Watch App Extension/Views/GlucoseTrendView.swift	
++++ b/Trio Watch App Extension/Views/GlucoseTrendView.swift	
+@@ -148,6 +148,10 @@ struct GlucoseTrendView: View {
+ 
+             Spacer()
+ 
++            Text(isWatchStateDated ? "--" : (state.eventualBG ?? "--"))
++                .font(.system(.caption))
++                .foregroundStyle(.secondary)
++
+             Text(
+                 isWatchStateDated ?
+                     String(localized: "STALE DATA", comment: "Information displayed when watch app data outdated or stale.") :
+@@ -156,6 +160,7 @@ struct GlucoseTrendView: View {
+             )
+             .font(.system(size: minutesAgoFontSize))
+             .fontWidth(isWatchStateDated ? .expanded : .standard)
++            .padding(.bottom, 4)
+ 
+             Spacer()
+ 
+diff --git a/Trio Watch App Extension/WatchState.swift b/Trio Watch App Extension/WatchState.swift
+index 6be3baa19..2b6535d5d 100644
+--- a/Trio Watch App Extension/WatchState.swift	
++++ b/Trio Watch App Extension/WatchState.swift	
+@@ -24,6 +24,7 @@ import WatchConnectivity
+     var maxYAxisValue: Decimal = 200
+     var cob: String? = "--"
+     var iob: String? = "--"
++    var eventualBG: String? = "--"
+     var lastLoopTime: String? = "--"
+     var overridePresets: [OverridePresetWatch] = []
+     var tempTargetPresets: [TempTargetPresetWatch] = []
+@@ -473,6 +474,10 @@ import WatchConnectivity
+             self.cob = cob
+         }
+ 
++        if let eventualBG = message[WatchMessageKeys.eventualBG] as? String {
++            self.eventualBG = eventualBG
++        }
++
+         if let lastLoopTime = message[WatchMessageKeys.lastLoopTime] as? String {
+             self.lastLoopTime = lastLoopTime
+         }
+diff --git a/Trio/Sources/Models/WatchMessageKeys.swift b/Trio/Sources/Models/WatchMessageKeys.swift
+index 68e4bdf39..1da7818b3 100644
+--- a/Trio/Sources/Models/WatchMessageKeys.swift
++++ b/Trio/Sources/Models/WatchMessageKeys.swift
+@@ -37,6 +37,7 @@ enum WatchMessageKeys {
+     static let delta = "delta"
+     static let iob = "iob"
+     static let cob = "cob"
++    static let eventualBG = "eventualBG"
+     static let lastLoopTime = "lastLoopTime"
+     static let glucoseValues = "glucoseValues"
+     static let minYAxisValue = "minYAxisValue"
+diff --git a/Trio/Sources/Models/WatchState.swift b/Trio/Sources/Models/WatchState.swift
+index cb2bf3c0b..d4c8e6c84 100644
+--- a/Trio/Sources/Models/WatchState.swift
++++ b/Trio/Sources/Models/WatchState.swift
+@@ -13,6 +13,7 @@ struct WatchState: Hashable, Equatable, Sendable, Encodable, Decodable {
+     var units: GlucoseUnits = .mgdL
+     var iob: String?
+     var cob: String?
++    var eventualBG: String?
+     var lastLoopTime: String?
+     var overridePresets: [OverridePresetWatch] = []
+     var tempTargetPresets: [TempTargetPresetWatch] = []
+@@ -41,6 +42,7 @@ struct WatchState: Hashable, Equatable, Sendable, Encodable, Decodable {
+             lhs.units == rhs.units &&
+             lhs.iob == rhs.iob &&
+             lhs.cob == rhs.cob &&
++            lhs.eventualBG == rhs.eventualBG &&
+             lhs.lastLoopTime == rhs.lastLoopTime &&
+             lhs.overridePresets == rhs.overridePresets &&
+             lhs.tempTargetPresets == rhs.tempTargetPresets &&
+@@ -67,6 +69,7 @@ struct WatchState: Hashable, Equatable, Sendable, Encodable, Decodable {
+         hasher.combine(units)
+         hasher.combine(iob)
+         hasher.combine(cob)
++        hasher.combine(eventualBG)
+         hasher.combine(lastLoopTime)
+         hasher.combine(overridePresets)
+         hasher.combine(tempTargetPresets)
+diff --git a/Trio/Sources/Services/WatchManager/AppleWatchManager.swift b/Trio/Sources/Services/WatchManager/AppleWatchManager.swift
+index 387bfc4e9..dd913a917 100644
+--- a/Trio/Sources/Services/WatchManager/AppleWatchManager.swift
++++ b/Trio/Sources/Services/WatchManager/AppleWatchManager.swift
+@@ -220,6 +220,15 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
+                 if let latestDetermination = determinationObjects.first {
+                     let cob = NSNumber(value: latestDetermination.cob)
+                     watchState.cob = Formatter.integerFormatter.string(from: cob)
++
++                    if let eventualBG = latestDetermination.eventualBG {
++                        let eventualGlucose = eventualBG.decimalValue
++                        if self.units == .mgdL {
++                            watchState.eventualBG = "\(eventualGlucose)"
++                        } else {
++                            watchState.eventualBG = "\(eventualGlucose.formattedAsMmolL)"
++                        }
++                    }
+                 }
+ 
+                 // Set override presets with their enabled status
+@@ -441,6 +450,7 @@ final class BaseWatchManager: NSObject, WCSessionDelegate, Injectable, WatchMana
+             WatchMessageKeys.delta: state.delta ?? "",
+             WatchMessageKeys.iob: state.iob ?? "",
+             WatchMessageKeys.cob: state.cob ?? "",
++            WatchMessageKeys.eventualBG: state.eventualBG ?? "",
+             WatchMessageKeys.lastLoopTime: state.lastLoopTime ?? "",
+             WatchMessageKeys.glucoseValues: state.glucoseValues.map { value in
+                 [

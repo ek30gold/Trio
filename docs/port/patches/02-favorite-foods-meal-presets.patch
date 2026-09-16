@@ -1,0 +1,626 @@
+diff --git a/CLAUDE.md b/CLAUDE.md
+new file mode 100644
+index 000000000..f365ecf94
+--- /dev/null
++++ b/CLAUDE.md
+@@ -0,0 +1,124 @@
++# CLAUDE.md
++
++This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
++
++## What is Trio
++
++Trio is an open-source automated insulin delivery (AID) system for iOS, built on the OpenAPS algorithm. It manages insulin dosing by integrating with Bluetooth insulin pumps and continuous glucose monitors (CGMs). This is safety-critical medical software — correctness matters above all else.
++
++## Build & Test
++
++**Open in Xcode:**
++```
++xed .
++```
++(Opens `Trio.xcworkspace` — always use the workspace, not the `.xcodeproj` directly.)
++
++**Run unit tests (CLI):**
++```bash
++xcodebuild build-for-testing -workspace Trio.xcworkspace -scheme "Trio Tests" \
++  -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
++
++xcodebuild test-without-building -workspace Trio.xcworkspace -scheme "Trio Tests" \
++  -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
++```
++
++**Format code before committing** (SwiftFormat is configured via `BuildTools/Package.swift`):
++```bash
++swift run --package-path BuildTools swiftformat .
++```
++
++**CI/CD:** GitHub Actions workflows in `.github/workflows/`. `build_trio.yml` builds via Fastlane (`bundle exec fastlane build_trio`). `unit_tests.yml` runs the test suite automatically on PRs.
++
++**App version and bundle ID** are set in `Config.xcconfig`.
++
++## Git Workflow — Critical
++
++This is safety-critical software. Trust in reported state must be verifiable, not assumed.
++
++- **Never report a commit or push as successful without verifying it.** After `git commit`, run `git log --oneline -1` and paste the actual hash. After `git push`, the command must return an explicit success message (not just exit cleanly) — confirm with `git log origin/<branch> --oneline -1` and check it matches local HEAD.
++- **A `git rebase` that reports "patch already upstream" or "dropping commit" is NOT a push confirmation.** It only means the local commit was redundant against whatever the remote currently is — verify the remote separately.
++- **If a push is rejected, stop and report the rejection.** Do not silently rebase-and-retry in a loop. Surface the conflict.
++- **When asked to edit files in a session, do not commit or push unless explicitly asked.** Default to edits-only; the human will verify and commit themselves for anything touching dosing-adjacent code.
++
++## Before Implementing
++
++For any non-trivial change, read the relevant files in full first and report findings before writing code — especially variable names, existing patterns (e.g. dictionary vs. single-task state, `orderPosition` conventions), and whether a similar feature already exists elsewhere in the codebase. Do not assume a prior session's description of "what was already built" is accurate — verify directly against the current file contents.
++
++## Architecture
++
++### Module Pattern (MVVM)
++
++Every feature lives in `Trio/Sources/Modules/<FeatureName>/` and follows this structure:
++- `<Feature>StateModel.swift` — `@Observable` class holding UI state, conforms to `BaseStateModel`
++- `<Feature>Provider.swift` — Protocol + `Base<Feature>Provider` class for business logic and data access
++- `<Feature>View.swift` — SwiftUI view, receives state model via DI
++
++`BaseStateModel` provides `subscribeSetting()` helpers and access to injected services. Providers access storage and services through the Swinject resolver.
++
++**Note:** Some modules may contain orphaned/dead code from prior refactors (unreferenced views, types with no backing CoreData entity). Confirm a module is actually reachable from the UI (check `Screen.swift` and navigation call sites) before assuming it's the active implementation.
++
++### Dependency Injection (Swinject)
++
++Services are registered in `Trio/Sources/Assemblies/`:
++- `StorageAssembly` — CoreData stack, file storage, keychain
++- `APSAssembly` — `APSManager`, `DeviceDataManager`, pump/CGM managers
++- `ServiceAssembly` — notifications, calendar, telemetry, watch manager
++- `NetworkAssembly` — HTTP client, Nightscout, Tidepool
++- `SecurityAssembly` — encryption
++
++Use `resolver.resolve(ServiceProtocol.self)` to inject. The resolver is thread-safe via `LockedResolver`.
++
++### Core Loop (APS)
++
++`APSManager` (`Trio/Sources/APS/`) is the heart of the app. Its `heartbeat()` triggers each algorithm cycle:
++
++1. Fetch glucose → `FetchGlucoseManager`
++2. Fetch pump state → `DeviceDataManager`
++3. Run OpenAPS algorithm → `OpenAPS.determineBasal()`
++4. Store determination in CoreData (`DeterminationStorage`)
++5. Publish result via Combine (`determinationSubject`)
++6. `HomeStateModel` subscribes and updates the UI
++7. `WatchManager` broadcasts to companion apps (throttled — see `Services/WatchManager/FLOW_DIAGRAM.md`)
++
++### Data Persistence
++
++Three layers, each with a clear purpose:
++- **CoreData** (`Model/TrioCoreDataPersistentContainer.xcdatamodeld`): Main persistent store. Use `viewContext` for reads on the main thread; `privateContext` for background writes.
++  - **Migrations:** The CoreData model has a single (unversioned) `.xcdatamodel`. Lightweight migration is enabled (`shouldMigrateStoreAutomatically` / `shouldInferMappingModelAutomatically` both `true` in `CoreDataStack.swift`), so adding new *optional* attributes with default values is safe without a model version bump. Renaming or removing attributes, or adding non-optional attributes without defaults, requires more care.
++- **File Storage** (`Services/Storage/`): JSON-serialized `Codable` structs via `FileStorage` protocol. Used for OpenAPS state files (glucose history, pump history, meal data, determinations).
++- **Keychain** (`Services/Storage/BaseKeychain`): Credentials and secrets only.
++
++Settings are persisted via `SettingsManager` using the `@Persisted` property wrapper (`TrioSettings`, `Preferences`).
++
++### Navigation
++
++`Router/` defines a `Screen` enum with all app screens. `BaseRouter` handles `push`, `present`, and `dismiss`. Each module declares its own `Router` protocol for type-safe navigation.
++
++### Reactive State
++
++Combine is used throughout. Key patterns:
++- `CurrentValueSubject` and `PassthroughSubject` for emitting events
++- `.throttle(for: .seconds(10), latest: false)` on high-frequency data (e.g., Watch updates)
++- `@Observable` (Swift 5.9 macro) on StateModels for SwiftUI binding
++
++## Key Conventions
++
++**Localization:** All user-facing strings must use the localization mechanism already in the app. English source strings only — translations go through Crowdin. Do not hard-code display strings.
++
++**Formatting:** Run SwiftFormat before committing. Do not make formatting-only changes to files you aren't otherwise modifying.
++
++**Pull requests:** Keep PRs small and focused. Branch from `dev`. Use `fix/`, `feature/`, or `refactor/` prefixes. AI-generated contributions must be fully understood and reviewed by the author — do not submit vibe-coded PRs.
++
++**Adding a new feature module:** Follow the existing StateModel + Provider + View pattern. Register new services in the appropriate `Assembly` file. Add any new settings screen to the Settings search index (see recent commits for examples).
++
++## Multi-Target Structure
++
++- **Trio** — main iOS app
++- **Trio Watch App Extension** — watchOS companion
++- **Trio Watch Complication** — watchOS widget/complication
++- **LiveActivity** — iOS 16.2+ Lock Screen widget
++- **TrioTests** — unit test target
++- **Trio Watch App Tests** — watch test target
++
++Pump and CGM drivers (OmniBLE, DanaKit, LibreTransmitter, etc.) are git submodules integrated via the workspace.
+diff --git a/Config.xcconfig b/Config.xcconfig
+index 6f4704330..013f1ad3e 100644
+--- a/Config.xcconfig
++++ b/Config.xcconfig
+@@ -18,8 +18,8 @@ BUNDLE_IDENTIFIER = org.nightscout.$(DEVELOPMENT_TEAM).trio
+ TRIO_APP_GROUP_ID = group.org.nightscout.$(DEVELOPMENT_TEAM).trio.trio-app-group
+ 
+ // The developers set the version numbers, please leave them alone
+-APP_VERSION = 0.8.2
+-APP_DEV_VERSION = 0.8.2
++APP_VERSION = 0.8.3
++APP_DEV_VERSION = 0.8.3
+ APP_BUILD_NUMBER = 1
+ COPYRIGHT_NOTICE =
+ 
+diff --git a/Model/Classes+Properties/MealPresetStored+CoreDataProperties.swift b/Model/Classes+Properties/MealPresetStored+CoreDataProperties.swift
+index 6996375ed..2ea3ce3e1 100644
+--- a/Model/Classes+Properties/MealPresetStored+CoreDataProperties.swift
++++ b/Model/Classes+Properties/MealPresetStored+CoreDataProperties.swift
+@@ -10,6 +10,8 @@ public extension MealPresetStored {
+     @NSManaged var dish: String?
+     @NSManaged var fat: NSDecimalNumber?
+     @NSManaged var protein: NSDecimalNumber?
++    @NSManaged var note: String?
++    @NSManaged var orderPosition: Int16
+ }
+ 
+ extension MealPresetStored: Identifiable {}
+diff --git a/Model/TrioCoreDataPersistentContainer.xcdatamodeld/TrioCoreDataPersistentContainer.xcdatamodel/contents b/Model/TrioCoreDataPersistentContainer.xcdatamodeld/TrioCoreDataPersistentContainer.xcdatamodel/contents
+index 98b3f7e68..daeafd6ae 100644
+--- a/Model/TrioCoreDataPersistentContainer.xcdatamodeld/TrioCoreDataPersistentContainer.xcdatamodel/contents
++++ b/Model/TrioCoreDataPersistentContainer.xcdatamodeld/TrioCoreDataPersistentContainer.xcdatamodel/contents
+@@ -104,6 +104,8 @@
+         <attribute name="dish" optional="YES" attributeType="String"/>
+         <attribute name="fat" optional="YES" attributeType="Decimal" defaultValueString="0.0"/>
+         <attribute name="protein" optional="YES" attributeType="Decimal" defaultValueString="0.0"/>
++        <attribute name="note" optional="YES" attributeType="String"/>
++        <attribute name="orderPosition" optional="YES" attributeType="Integer 16" defaultValueString="0"/>
+     </entity>
+     <entity name="OpenAPS_Battery" representedClassName="OpenAPS_Battery" syncable="YES">
+         <attribute name="date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+diff --git a/Trio.xcodeproj/project.pbxproj b/Trio.xcodeproj/project.pbxproj
+index 1335a426e..2a30b9b52 100644
+--- a/Trio.xcodeproj/project.pbxproj
++++ b/Trio.xcodeproj/project.pbxproj
+@@ -715,6 +715,7 @@
+ 		DDF847E12C5C287F0049BB3B /* LiveActivitySettingsStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF847E02C5C287F0049BB3B /* LiveActivitySettingsStateModel.swift */; };
+ 		DDF847E42C5C288F0049BB3B /* LiveActivitySettingsRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF847E32C5C288F0049BB3B /* LiveActivitySettingsRootView.swift */; };
+ 		DDF847E62C5D66490049BB3B /* AddMealPresetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF847E52C5D66490049BB3B /* AddMealPresetView.swift */; };
++		BD3A9F1F2C5D66490049BB3C /* ManageMealPresetsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD3A9F1E2C5D66490049BB3C /* ManageMealPresetsView.swift */; };
+ 		DDF847E82C5DABA30049BB3B /* WatchConfigAppleWatchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF847E72C5DABA30049BB3B /* WatchConfigAppleWatchView.swift */; };
+ 		DDF847EA2C5DABAC0049BB3B /* WatchConfigGarminView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF847E92C5DABAC0049BB3B /* WatchConfigGarminView.swift */; };
+ 		DDFF202F2DB1D14500AB8A96 /* NotificationPermissionStepView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDFF202E2DB1D14500AB8A96 /* NotificationPermissionStepView.swift */; };
+@@ -1578,6 +1579,7 @@
+ 		DDF847E02C5C287F0049BB3B /* LiveActivitySettingsStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivitySettingsStateModel.swift; sourceTree = "<group>"; };
+ 		DDF847E32C5C288F0049BB3B /* LiveActivitySettingsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivitySettingsRootView.swift; sourceTree = "<group>"; };
+ 		DDF847E52C5D66490049BB3B /* AddMealPresetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddMealPresetView.swift; sourceTree = "<group>"; };
++		BD3A9F1E2C5D66490049BB3C /* ManageMealPresetsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageMealPresetsView.swift; sourceTree = "<group>"; };
+ 		DDF847E72C5DABA30049BB3B /* WatchConfigAppleWatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchConfigAppleWatchView.swift; sourceTree = "<group>"; };
+ 		DDF847E92C5DABAC0049BB3B /* WatchConfigGarminView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchConfigGarminView.swift; sourceTree = "<group>"; };
+ 		DDFF202E2DB1D14500AB8A96 /* NotificationPermissionStepView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationPermissionStepView.swift; sourceTree = "<group>"; };
+@@ -3379,6 +3381,7 @@
+ 			children = (
+ 				BD0B2EF22C5998E600B3298F /* MealPresetView.swift */,
+ 				DDF847E52C5D66490049BB3B /* AddMealPresetView.swift */,
++				BD3A9F1E2C5D66490049BB3C /* ManageMealPresetsView.swift */,
+ 			);
+ 			path = MealPreset;
+ 			sourceTree = "<group>";
+@@ -4512,6 +4515,7 @@
+ 				58645B9F2CA2D2BE008AFCE7 /* PumpHistorySetup.swift in Sources */,
+ 				DD17454E2C55CA4D00211FAC /* UnitsLimitsSettingsDataFlow.swift in Sources */,
+ 				DDF847E62C5D66490049BB3B /* AddMealPresetView.swift in Sources */,
++				BD3A9F1F2C5D66490049BB3C /* ManageMealPresetsView.swift in Sources */,
+ 				3811DEAE25C9D88300A708ED /* Cache.swift in Sources */,
+ 				BDA6CC882CAF219B00F942F9 /* TempTargetSetup.swift in Sources */,
+ 				383420D625FFE38C002D46C1 /* LoopView.swift in Sources */,
+diff --git a/Trio/Sources/Modules/Settings/SettingItems.swift b/Trio/Sources/Modules/Settings/SettingItems.swift
+index 00d070988..1ec213728 100644
+--- a/Trio/Sources/Modules/Settings/SettingItems.swift
++++ b/Trio/Sources/Modules/Settings/SettingItems.swift
+@@ -249,6 +249,11 @@ enum SettingItems {
+             ],
+             path: ["Features", "Meal Settings"]
+         ),
++        SettingItem(
++            title: "Manage Meal Presets",
++            view: .manageMealPresets,
++            path: ["Features", "Manage Meal Presets"]
++        ),
+         SettingItem(
+             title: "Shortcuts",
+             view: .shortcutsConfig,
+diff --git a/Trio/Sources/Modules/Settings/View/Subviews/FeatureSettingsView.swift b/Trio/Sources/Modules/Settings/View/Subviews/FeatureSettingsView.swift
+index 3c496efde..56ed14d47 100644
+--- a/Trio/Sources/Modules/Settings/View/Subviews/FeatureSettingsView.swift
++++ b/Trio/Sources/Modules/Settings/View/Subviews/FeatureSettingsView.swift
+@@ -23,6 +23,7 @@ struct FeatureSettingsView: BaseView {
+                 content: {
+                     Text("Bolus Calculator").navigationLink(to: .bolusCalculatorConfig, from: self)
+                     Text("Meal Settings").navigationLink(to: .mealSettings, from: self)
++                    Text("Manage Meal Presets").navigationLink(to: .manageMealPresets, from: self)
+                     Text("Shortcuts").navigationLink(to: .shortcutsConfig, from: self)
+                     Text("Remote Control").navigationLink(to: .remoteControlConfig, from: self)
+                 }
+diff --git a/Trio/Sources/Modules/Treatments/TreatmentsStateModel.swift b/Trio/Sources/Modules/Treatments/TreatmentsStateModel.swift
+index 1783067a7..8e5186db3 100644
+--- a/Trio/Sources/Modules/Treatments/TreatmentsStateModel.swift
++++ b/Trio/Sources/Modules/Treatments/TreatmentsStateModel.swift
+@@ -96,6 +96,7 @@ extension Treatments {
+         var dish: String = ""
+         var selection: MealPresetStored?
+         var summation: [String] = []
++        var mealPresets: [MealPresetStored] = []
+         var maxCarbs: Decimal = 0
+         var maxFat: Decimal = 0
+         var maxProtein: Decimal = 0
+@@ -203,6 +204,7 @@ extension Treatments {
+                         group.addTask {
+                             self.setupLastBolus()
+                         }
++                        group.addTask { self.setupMealPresetsArray() }
+ 
+                         // Wait for all tasks to complete
+                         try await group.waitForAll()
+@@ -702,6 +704,30 @@ extension Treatments {
+         func addToSummation() {
+             summation.append(selection?.dish ?? "")
+         }
++
++        func setupMealPresetsArray() {
++            let request: NSFetchRequest<MealPresetStored> = MealPresetStored.fetchRequest()
++            request.sortDescriptors = [NSSortDescriptor(key: "orderPosition", ascending: true)]
++            do {
++                mealPresets = try viewContext.fetch(request)
++            } catch {
++                debug(.default, "\(DebuggingIdentifiers.failed) Failed to fetch meal presets: \(error)")
++            }
++        }
++
++        func reorderMealPreset(from source: IndexSet, to destination: Int) {
++            mealPresets.move(fromOffsets: source, toOffset: destination)
++            for (index, preset) in mealPresets.enumerated() {
++                preset.orderPosition = Int16(index + 1)
++            }
++            do {
++                guard viewContext.hasChanges else { return }
++                try viewContext.save()
++                setupMealPresetsArray()
++            } catch {
++                debug(.default, "\(DebuggingIdentifiers.failed) Failed to save meal preset order: \(error)")
++            }
++        }
+     }
+ }
+ 
+diff --git a/Trio/Sources/Modules/Treatments/View/MealPreset/AddMealPresetView.swift b/Trio/Sources/Modules/Treatments/View/MealPreset/AddMealPresetView.swift
+index 907dec417..a13c19031 100644
+--- a/Trio/Sources/Modules/Treatments/View/MealPreset/AddMealPresetView.swift
++++ b/Trio/Sources/Modules/Treatments/View/MealPreset/AddMealPresetView.swift
+@@ -5,6 +5,7 @@ import SwiftUI
+ 
+ struct AddMealPresetView: View {
+     @Binding var dish: String
++    @Binding var note: String
+     @Binding var presetCarbs: Decimal
+     @Binding var presetFat: Decimal
+     @Binding var presetProtein: Decimal
+@@ -36,6 +37,11 @@ struct AddMealPresetView: View {
+                         placeholder: String(localized: "Name Of Dish"),
+                         maxLength: 25
+                     )
++                    TextFieldWithToolBarString(
++                        text: $note,
++                        placeholder: String(localized: "Serving size or notes (optional)"),
++                        maxLength: 50
++                    )
+                 } header: {
+                     Text("New Preset")
+                 }
+diff --git a/Trio/Sources/Modules/Treatments/View/MealPreset/ManageMealPresetsView.swift b/Trio/Sources/Modules/Treatments/View/MealPreset/ManageMealPresetsView.swift
+new file mode 100644
+index 000000000..d90d47255
+--- /dev/null
++++ b/Trio/Sources/Modules/Treatments/View/MealPreset/ManageMealPresetsView.swift
+@@ -0,0 +1,186 @@
++import CoreData
++import Foundation
++import SwiftUI
++
++struct ManageMealPresetsView: View {
++    @Bindable var state: Treatments.StateModel
++
++    @Environment(\.colorScheme) var colorScheme
++    @Environment(\.dismiss) var dismiss
++    @Environment(\.managedObjectContext) var moc
++    @Environment(AppState.self) var appState
++
++    @State private var showAddNewPresetSheet = false
++    @State private var editingPreset: MealPresetStored? = nil
++
++    @State private var dish: String = ""
++    @State private var note: String = ""
++    @State private var presetCarbs: Decimal = 0
++    @State private var presetFat: Decimal = 0
++    @State private var presetProtein: Decimal = 0
++
++    private var mealFormatter: NumberFormatter {
++        let formatter = NumberFormatter()
++        formatter.numberStyle = .decimal
++        formatter.maximumFractionDigits = 1
++        return formatter
++    }
++
++    var body: some View {
++        List {
++                ForEach(state.mealPresets, id: \.self) { preset in
++                    Button {
++                        populateEditForm(from: preset)
++                        editingPreset = preset
++                    } label: {
++                        VStack(alignment: .leading, spacing: 2) {
++                            Text(preset.dish ?? "")
++                                .foregroundStyle(.primary)
++                            if let note = preset.note, !note.isEmpty {
++                                Text(note)
++                                    .font(.caption)
++                                    .foregroundStyle(.secondary)
++                            }
++                            HStack(spacing: 8) {
++                                Text("C: \(((preset.carbs ?? 0) as NSDecimalNumber) as Decimal as NSNumber, formatter: mealFormatter)g")
++                                    .font(.caption)
++                                    .foregroundStyle(.secondary)
++                                if state.useFPUconversion {
++                                    Text("F: \(((preset.fat ?? 0) as NSDecimalNumber) as Decimal as NSNumber, formatter: mealFormatter)g")
++                                        .font(.caption)
++                                        .foregroundStyle(.secondary)
++                                    Text("P: \(((preset.protein ?? 0) as NSDecimalNumber) as Decimal as NSNumber, formatter: mealFormatter)g")
++                                        .font(.caption)
++                                        .foregroundStyle(.secondary)
++                                }
++                            }
++                        }
++                    }
++                }
++                .onMove(perform: state.reorderMealPreset)
++                .onDelete(perform: deletePresets)
++            }
++            .scrollContentBackground(.hidden)
++            .background(appState.trioBackgroundColor(for: colorScheme))
++            .navigationTitle("Manage Presets")
++            .navigationBarTitleDisplayMode(.inline)
++            .toolbar {
++                ToolbarItem(placement: .topBarLeading) {
++                    Button("Done") { dismiss() }
++                }
++                ToolbarItem(placement: .topBarTrailing) {
++                    HStack {
++                        EditButton()
++                        Button(action: { showAddNewPresetSheet = true }) {
++                            Image(systemName: "plus")
++                        }
++                    }
++                }
++            }
++            .sheet(isPresented: $showAddNewPresetSheet) {
++                AddMealPresetView(
++                    dish: $dish,
++                    note: $note,
++                    presetCarbs: $presetCarbs,
++                    presetFat: $presetFat,
++                    presetProtein: $presetProtein,
++                    displayFatAndProtein: $state.useFPUconversion,
++                    onSave: saveNewPreset,
++                    onCancel: {
++                        showAddNewPresetSheet = false
++                        resetForm()
++                    }
++                )
++            }
++            .sheet(item: $editingPreset) { preset in
++                AddMealPresetView(
++                    dish: $dish,
++                    note: $note,
++                    presetCarbs: $presetCarbs,
++                    presetFat: $presetFat,
++                    presetProtein: $presetProtein,
++                    displayFatAndProtein: $state.useFPUconversion,
++                    onSave: { saveEdit(to: preset) },
++                    onCancel: {
++                        editingPreset = nil
++                        resetForm()
++                    }
++                )
++        }
++    }
++
++    private func populateEditForm(from preset: MealPresetStored) {
++        dish = preset.dish ?? ""
++        note = preset.note ?? ""
++        presetCarbs = ((preset.carbs ?? 0) as NSDecimalNumber) as Decimal
++        presetFat = ((preset.fat ?? 0) as NSDecimalNumber) as Decimal
++        presetProtein = ((preset.protein ?? 0) as NSDecimalNumber) as Decimal
++    }
++
++    private func resetForm() {
++        dish = ""
++        note = ""
++        presetCarbs = 0
++        presetFat = 0
++        presetProtein = 0
++    }
++
++    private func saveNewPreset() {
++        guard !dish.isEmpty else { return }
++        let preset = MealPresetStored(context: moc)
++        preset.dish = dish
++        preset.note = note.isEmpty ? nil : note
++        preset.orderPosition = Int16((state.mealPresets.count) + 1)
++        preset.carbs = presetCarbs as NSDecimalNumber
++        if state.useFPUconversion {
++            preset.fat = presetFat as NSDecimalNumber
++            preset.protein = presetProtein as NSDecimalNumber
++        }
++        do {
++            guard moc.hasChanges else { return }
++            try moc.save()
++            state.setupMealPresetsArray()
++            showAddNewPresetSheet = false
++            resetForm()
++        } catch let error as NSError {
++            debugPrint("\(DebuggingIdentifiers.failed) Failed to save Meal Preset with error: \(error.userInfo)")
++        }
++    }
++
++    private func saveEdit(to preset: MealPresetStored) {
++        guard !dish.isEmpty else { return }
++        preset.dish = dish
++        preset.note = note.isEmpty ? nil : note
++        preset.carbs = presetCarbs as NSDecimalNumber
++        if state.useFPUconversion {
++            preset.fat = presetFat as NSDecimalNumber
++            preset.protein = presetProtein as NSDecimalNumber
++        } else {
++            preset.fat = nil
++            preset.protein = nil
++        }
++        do {
++            guard moc.hasChanges else { return }
++            try moc.save()
++            state.setupMealPresetsArray()
++            editingPreset = nil
++            resetForm()
++        } catch let error as NSError {
++            debugPrint("\(DebuggingIdentifiers.failed) Failed to update Meal Preset with error: \(error.userInfo)")
++        }
++    }
++
++    private func deletePresets(at offsets: IndexSet) {
++        for index in offsets {
++            let preset = state.mealPresets[index]
++            moc.delete(preset)
++        }
++        do {
++            guard moc.hasChanges else { return }
++            try moc.save()
++            state.setupMealPresetsArray()
++        } catch let error as NSError {
++            debugPrint("\(DebuggingIdentifiers.failed) Failed to delete Meal Preset with error: \(error.userInfo)")
++        }
++    }
++}
+diff --git a/Trio/Sources/Modules/Treatments/View/MealPreset/MealPresetView.swift b/Trio/Sources/Modules/Treatments/View/MealPreset/MealPresetView.swift
+index 028aaabfd..8051e7846 100644
+--- a/Trio/Sources/Modules/Treatments/View/MealPreset/MealPresetView.swift
++++ b/Trio/Sources/Modules/Treatments/View/MealPreset/MealPresetView.swift
+@@ -12,7 +12,9 @@ struct MealPresetView: View {
+ 
+     @State private var showAlert = false
+     @State private var dish: String = ""
++    @State private var note: String = ""
+     @State private var showAddNewPresetSheet = false
++    @State private var showManagePresetsSheet = false
+ 
+     @State private var presetCarbs: Decimal = 0
+     @State private var presetFat: Decimal = 0
+@@ -24,7 +26,7 @@ struct MealPresetView: View {
+ 
+     @FetchRequest(
+         entity: MealPresetStored.entity(),
+-        sortDescriptors: [NSSortDescriptor(key: "dish", ascending: true)]
++        sortDescriptors: [NSSortDescriptor(key: "orderPosition", ascending: true)]
+     ) var carbPresets: FetchedResults<MealPresetStored>
+ 
+     private var mealFormatter: NumberFormatter {
+@@ -71,19 +73,25 @@ struct MealPresetView: View {
+                     }
+                 }
+                 ToolbarItem(placement: .topBarTrailing) {
+-                    Button(action: {
+-                        showAddNewPresetSheet.toggle()
+-                    }, label: {
+-                        HStack {
+-                            Text("New Preset")
+-                            Image(systemName: "plus")
++                    HStack {
++                        Button("Manage") {
++                            showManagePresetsSheet = true
+                         }
+-                    })
++                        Button(action: {
++                            showAddNewPresetSheet.toggle()
++                        }, label: {
++                            HStack {
++                                Text("New Preset")
++                                Image(systemName: "plus")
++                            }
++                        })
++                    }
+                 }
+             })
+             .sheet(isPresented: $showAddNewPresetSheet) {
+                 AddMealPresetView(
+                     dish: $dish,
++                    note: $note,
+                     presetCarbs: $presetCarbs,
+                     presetFat: $presetFat,
+                     presetProtein: $presetProtein,
+@@ -95,6 +103,9 @@ struct MealPresetView: View {
+                     }
+                 )
+             }
++            .sheet(isPresented: $showManagePresetsSheet) {
++                ManageMealPresetsView(state: state)
++            }
+             .onDisappear {
+                 resetValues()
+             }
+@@ -259,6 +270,11 @@ struct MealPresetView: View {
+                             .foregroundColor(.blue)
+                         Text(key)
+                     }
++                    if let note = carbPresets.first(where: { $0.dish ?? "" == key })?.note, !note.isEmpty {
++                        Text(note)
++                            .font(.caption)
++                            .foregroundStyle(.secondary)
++                    }
+                 }
+             }
+         }
+@@ -271,6 +287,7 @@ struct MealPresetView: View {
+ 
+     private func resetNewPresetForm() {
+         dish = ""
++        note = ""
+         presetCarbs = 0
+         presetFat = 0
+         presetProtein = 0
+@@ -336,6 +353,8 @@ struct MealPresetView: View {
+         if dish != "" {
+             let preset = MealPresetStored(context: moc)
+             preset.dish = dish
++            preset.note = note.isEmpty ? nil : note
++            preset.orderPosition = Int16((state.mealPresets.count) + 1)
+             preset.carbs = presetCarbs as NSDecimalNumber
+             if state.useFPUconversion {
+                 preset.fat = presetFat as NSDecimalNumber
+@@ -346,6 +365,7 @@ struct MealPresetView: View {
+                 guard moc.hasChanges else { return }
+                 try moc.save()
+                 showAddNewPresetSheet.toggle()
++                note = ""
+             } catch let error as NSError {
+                 debugPrint("\(DebuggingIdentifiers.failed) Failed to save Meal Preset with error: \(error.userInfo)")
+             }
+diff --git a/Trio/Sources/Router/Screen.swift b/Trio/Sources/Router/Screen.swift
+index 1bfc27857..038b08bed 100644
+--- a/Trio/Sources/Router/Screen.swift
++++ b/Trio/Sources/Router/Screen.swift
+@@ -50,6 +50,7 @@ enum Screen: Identifiable, Hashable {
+     case unitsAndLimits
+     case appDiagnostics
+     case settingsExport
++    case manageMealPresets
+ 
+     var id: Int { String(reflecting: self).hashValue }
+ }
+@@ -165,6 +166,8 @@ extension Screen {
+             AppDiagnostics.RootView(resolver: resolver)
+         case .settingsExport:
+             SettingsExport.RootView(resolver: resolver)
++        case .manageMealPresets:
++            ManageMealPresetsView(state: resolver.resolve(Treatments.StateModel.self)!)
+         }
+     }
+ 

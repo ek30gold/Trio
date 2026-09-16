@@ -1,0 +1,1173 @@
+diff --git a/Trio/Sources/APS/Storage/OverrideStorage.swift b/Trio/Sources/APS/Storage/OverrideStorage.swift
+index 0b2f1fec1..f9703d6df 100644
+--- a/Trio/Sources/APS/Storage/OverrideStorage.swift
++++ b/Trio/Sources/APS/Storage/OverrideStorage.swift
+@@ -19,6 +19,8 @@ protocol OverrideStorage {
+     ) async throws
+     func getPresetOverridesForNightscout() async throws -> [NightscoutPresetOverride]
+     func fetchLatestActiveOverride() async throws -> NSManagedObjectID?
++    func fetchScheduledOverrides() async throws -> [NSManagedObjectID]
++    func fetchScheduledOverride(for date: Date) async throws -> [NSManagedObjectID]
+ }
+ 
+ final class BaseOverrideStorage: @preconcurrency OverrideStorage, Injectable {
+@@ -407,4 +409,51 @@ final class BaseOverrideStorage: @preconcurrency OverrideStorage, Injectable {
+             return fetchedResults.first?.objectID
+         }
+     }
++
++    func fetchScheduledOverrides() async throws -> [NSManagedObjectID] {
++        let results = try await CoreDataStack.shared.fetchEntitiesAsync(
++            ofType: OverrideStored.self,
++            onContext: context,
++            predicate: NSPredicate(
++                format: "enabled == %@ AND isPreset == %@ AND date > %@",
++                false as NSNumber,
++                false as NSNumber,
++                Date() as NSDate
++            ),
++            key: "date",
++            ascending: true
++        )
++        return try await context.perform {
++            guard let fetchedResults = results as? [OverrideStored] else {
++                throw CoreDataError.fetchError(function: #function, file: #file)
++            }
++            return fetchedResults.map(\.objectID)
++        }
++    }
++
++    func fetchScheduledOverride(for date: Date) async throws -> [NSManagedObjectID] {
++        let tolerance: TimeInterval = 1.0
++        let lower = date.addingTimeInterval(-tolerance)
++        let upper = date.addingTimeInterval(tolerance)
++        let results = try await CoreDataStack.shared.fetchEntitiesAsync(
++            ofType: OverrideStored.self,
++            onContext: context,
++            predicate: NSPredicate(
++                format: "enabled == %@ AND isPreset == %@ AND date >= %@ AND date <= %@",
++                false as NSNumber,
++                false as NSNumber,
++                lower as NSDate,
++                upper as NSDate
++            ),
++            key: "date",
++            ascending: false,
++            fetchLimit: 1
++        )
++        return try await context.perform {
++            guard let fetchedResults = results as? [OverrideStored] else {
++                throw CoreDataError.fetchError(function: #function, file: #file)
++            }
++            return fetchedResults.map(\.objectID)
++        }
++    }
+ }
+diff --git a/Trio/Sources/APS/Storage/TempTargetsStorage.swift b/Trio/Sources/APS/Storage/TempTargetsStorage.swift
+index 507a77049..6327f1fed 100644
+--- a/Trio/Sources/APS/Storage/TempTargetsStorage.swift
++++ b/Trio/Sources/APS/Storage/TempTargetsStorage.swift
+@@ -79,7 +79,10 @@ final class BaseTempTargetsStorage: TempTargetsStorage, Injectable {
+     }
+ 
+     func fetchScheduledTempTargets() async throws -> [NSManagedObjectID] {
+-        let scheduledTempTargets = NSPredicate(format: "date > %@", Date() as NSDate)
++        let scheduledTempTargets = NSPredicate(
++            format: "date > %@ AND enabled == false AND isPreset == false",
++            Date() as NSDate
++        )
+ 
+         let results = try await CoreDataStack.shared.fetchEntitiesAsync(
+             ofType: TempTargetStored.self,
+@@ -99,7 +102,9 @@ final class BaseTempTargetsStorage: TempTargetsStorage, Injectable {
+     }
+ 
+     func fetchScheduledTempTarget(for targetDate: Date) async throws -> [NSManagedObjectID] {
+-        let predicate = NSPredicate(format: "date == %@", targetDate as NSDate)
++        let lower = targetDate.addingTimeInterval(-1)
++        let upper = targetDate.addingTimeInterval(1)
++        let predicate = NSPredicate(format: "date >= %@ AND date <= %@", lower as NSDate, upper as NSDate)
+ 
+         let results = try await CoreDataStack.shared.fetchEntitiesAsync(
+             ofType: TempTargetStored.self,
+diff --git a/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel+Extensions/AdjustmentsStateModel+Helpers.swift b/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel+Extensions/AdjustmentsStateModel+Helpers.swift
+index dce49fb9f..b90ef7a13 100644
+--- a/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel+Extensions/AdjustmentsStateModel+Helpers.swift
++++ b/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel+Extensions/AdjustmentsStateModel+Helpers.swift
+@@ -68,6 +68,16 @@ extension Adjustments.StateModel {
+         let totalMinutes = (hours * 60) + minutes
+         return Decimal(max(0, totalMinutes))
+     }
++
++    /// Waits until a target date before proceeding.
++    /// Wakes every 60 seconds to check; wakes sooner if the target is near.
++    func waitUntilDate(_ targetDate: Date) async {
++        while Date() < targetDate {
++            let timeInterval = targetDate.timeIntervalSince(Date())
++            let sleepDuration = min(timeInterval, 60.0)
++            try? await Task.sleep(nanoseconds: UInt64(sleepDuration * 1_000_000_000))
++        }
++    }
+ }
+ 
+ extension PickerSettingsProvider {
+diff --git a/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel+Extensions/AdjustmentsStateModel+Overrides.swift b/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel+Extensions/AdjustmentsStateModel+Overrides.swift
+index b79489046..467a268d8 100644
+--- a/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel+Extensions/AdjustmentsStateModel+Overrides.swift
++++ b/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel+Extensions/AdjustmentsStateModel+Overrides.swift
+@@ -2,6 +2,7 @@ import Combine
+ import CoreData
+ import Foundation
+ import SwiftUI
++import UserNotifications
+ 
+ extension Adjustments.StateModel {
+     // MARK: - Enact Overrides
+@@ -371,6 +372,132 @@ extension Adjustments.StateModel {
+ 
+         return percentage
+     }
++
++    func setupScheduledOverridesArray() {
++        Task {
++            do {
++                let ids = try await overrideStorage.fetchScheduledOverrides()
++                await updateScheduledOverridesArray(with: ids)
++            } catch {
++                debug(.default, "\(DebuggingIdentifiers.failed) Failed to setup scheduled overrides: \(error)")
++            }
++        }
++    }
++
++    @MainActor private func updateScheduledOverridesArray(with IDs: [NSManagedObjectID]) async {
++        do {
++            let overrideObjects = try IDs.compactMap { id in
++                try viewContext.existingObject(with: id) as? OverrideStored
++            }
++            scheduledOverrides = overrideObjects
++        } catch {
++            debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to extract scheduled overrides: \(error)")
++        }
++    }
++
++    func scheduleOverride(objectID: NSManagedObjectID, for scheduledDate: Date) {
++        guard scheduledDate > Date(),
++              scheduledDate <= Date().addingTimeInterval(72 * 3600) else {
++            debug(.default, "\(DebuggingIdentifiers.failed) Scheduled date out of valid range.")
++            return
++        }
++        scheduledOverrideTasks[objectID]?.cancel()
++        scheduledOverrideTasks[objectID] = Task {
++            await waitUntilDate(scheduledDate)
++            guard !Task.isCancelled else { return }
++            await activateScheduledOverride(for: scheduledDate)
++        }
++        setupScheduledOverridesArray()
++        let overrideName: String
++        if let override = try? viewContext.existingObject(with: objectID) as? OverrideStored {
++            overrideName = override.name ?? ""
++        } else {
++            overrideName = ""
++        }
++        Task {
++            await sendScheduledOverrideActivationNotification(name: overrideName, scheduledDate: scheduledDate)
++        }
++    }
++
++    func activateScheduledOverride(for date: Date) async {
++        do {
++            let ids = try await overrideStorage.fetchScheduledOverride(for: date)
++            guard let firstID = ids.first else {
++                debug(.default, "\(DebuggingIdentifiers.failed) No scheduled override found for the specified date.")
++                return
++            }
++
++            var overrideName: String = ""
++
++            await disableAllActiveOverrides(createOverrideRunEntry: currentActiveOverride != nil)
++
++            try await MainActor.run {
++                guard let override = try viewContext.existingObject(with: firstID) as? OverrideStored else { return }
++                overrideName = override.name ?? ""
++                override.enabled = true
++                override.date = Date()
++                override.isUploadedToNS = false
++                isOverrideEnabled = true
++                try viewContext.save()
++            }
++
++            setupScheduledOverridesArray()
++            updateLatestOverrideConfiguration()
++        } catch {
++            debug(.default, "\(DebuggingIdentifiers.failed) Failed to activate scheduled override: \(error)")
++        }
++    }
++
++    func cancelScheduledOverride(_ objectID: NSManagedObjectID) async {
++        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["scheduledOverrideActivation"])
++        scheduledOverrideTasks[objectID]?.cancel()
++        scheduledOverrideTasks.removeValue(forKey: objectID)
++        await overrideStorage.deleteOverridePreset(objectID)
++        setupScheduledOverridesArray()
++    }
++
++    func restartPendingScheduledOverrideTask() {
++        Task {
++            do {
++                let ids = try await overrideStorage.fetchScheduledOverrides()
++                for id in ids {
++                    guard let override = try? viewContext.existingObject(with: id) as? OverrideStored,
++                          let scheduledDate = override.date,
++                          scheduledDate > Date() else { continue }
++
++                    scheduledOverrideTasks[id]?.cancel()
++                    scheduledOverrideTasks[id] = Task {
++                        await waitUntilDate(scheduledDate)
++                        guard !Task.isCancelled else { return }
++                        await activateScheduledOverride(for: scheduledDate)
++                    }
++                }
++            } catch {
++                debug(.default, "\(DebuggingIdentifiers.failed) Failed to restart pending scheduled override tasks: \(error)")
++            }
++        }
++    }
++
++    private func sendScheduledOverrideActivationNotification(name: String, scheduledDate: Date) async {
++        let content = UNMutableNotificationContent()
++        content.title = String(localized: "Override Scheduled")
++        content.body = String(localized: "\(name) will start at \(DateFormatter.localizedString(from: scheduledDate, dateStyle: .none, timeStyle: .short)).")
++        content.sound = .default
++        content.userInfo[NotificationAction.key] = NotificationAction.scheduledOverrideActivation.rawValue
++        content.userInfo["scheduledDate"] = scheduledDate.timeIntervalSince1970
++
++        let calendar = Calendar.current
++        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: scheduledDate)
++        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
++
++        let request = UNNotificationRequest(
++            identifier: "scheduledOverrideActivation",
++            content: content,
++            trigger: trigger
++        )
++
++        try? await UNUserNotificationCenter.current().add(request)
++    }
+ }
+ 
+ enum IsfAndOrCrOptions: String, CaseIterable {
+@@ -409,3 +536,11 @@ enum DisableSmbOptions: String, CaseIterable {
+         }
+     }
+ }
++
++extension Adjustments.StateModel: ScheduledOverrideActivationObserver {
++    func scheduledOverrideShouldActivate(for date: Date) {
++        Task {
++            await activateScheduledOverride(for: date)
++        }
++    }
++}
+diff --git a/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel+Extensions/AdjustmentsStateModel+TempTargets.swift b/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel+Extensions/AdjustmentsStateModel+TempTargets.swift
+index 6fdefeda1..6332fdc12 100644
+--- a/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel+Extensions/AdjustmentsStateModel+TempTargets.swift
++++ b/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel+Extensions/AdjustmentsStateModel+TempTargets.swift
+@@ -1,6 +1,7 @@
+ import Combine
+ import CoreData
+ import Foundation
++import UserNotifications
+ 
+ extension Adjustments.StateModel {
+     // MARK: - State Initialization and Updates
+@@ -133,19 +134,15 @@ extension Adjustments.StateModel {
+         }
+     }
+ 
+-    /// Saves a scheduled Temp Target and activates it at the specified date.
++    /// Saves a scheduled Temp Target and registers it for future activation.
+     func saveScheduledTempTarget() async throws {
+-        let date = self.date
+-        guard date > Date() else { return }
++        let scheduledDate = date
++        guard scheduledDate > Date(),
++              scheduledDate <= Date().addingTimeInterval(72 * 3600) else { return }
+ 
+-        let adjustmentType = halfBasalTarget == settingHalfBasalTarget ? "Standard" : "Custom"
+-        debug(
+-            .default,
+-            "TempTarget: target=\(tempTargetTarget), HBT=\(settingHalfBasalTarget), effectiveHBT=\(halfBasalTarget), percentage=\(Int(percentage))%, adjustmentType=\(adjustmentType)"
+-        )
+         let tempTarget = TempTarget(
+             name: tempTargetName,
+-            createdAt: date,
++            createdAt: scheduledDate,
+             targetTop: tempTargetTarget,
+             targetBottom: tempTargetTarget,
+             duration: tempTargetDuration,
+@@ -155,12 +152,24 @@ extension Adjustments.StateModel {
+             enabled: false,
+             halfBasalTarget: halfBasalTarget
+         )
++
+         try await tempTargetStorage.storeTempTarget(tempTarget: tempTarget)
+         setupScheduledTempTargetsArray()
+-        await waitUntilDate(date)
+-        await disableAllActiveTempTargets(createTempTargetRunEntry: true)
+-        await enableScheduledTempTarget(for: date)
+-        tempTargetStorage.saveTempTargetsToStorage([tempTarget])
++
++        let ids = try await tempTargetStorage.fetchScheduledTempTarget(for: scheduledDate)
++        guard let firstID = ids.first else {
++            debug(.default, "\(DebuggingIdentifiers.failed) Failed to find stored scheduled temp target.")
++            return
++        }
++
++        scheduledTempTargetTasks[firstID]?.cancel()
++        scheduledTempTargetTasks[firstID] = Task {
++            await waitUntilDate(scheduledDate)
++            guard !Task.isCancelled else { return }
++            await enableScheduledTempTarget(for: scheduledDate)
++        }
++
++        await sendScheduledTempTargetNotification(name: tempTargetName, scheduledDate: scheduledDate)
+     }
+ 
+     /// Enables a scheduled Temp Target for a specific date.
+@@ -196,12 +205,63 @@ extension Adjustments.StateModel {
+         }
+     }
+ 
+-    /// Waits until a target date before proceeding.
+-    private func waitUntilDate(_ targetDate: Date) async {
+-        while Date() < targetDate {
+-            let timeInterval = targetDate.timeIntervalSince(Date())
+-            let sleepDuration = min(timeInterval, 60.0)
+-            try? await Task.sleep(nanoseconds: UInt64(sleepDuration * 1_000_000_000))
++    /// Cancels a scheduled Temp Target and removes it from storage.
++    func cancelScheduledTempTarget(_ objectID: NSManagedObjectID) async {
++        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["scheduledTempTargetActivation"])
++        scheduledTempTargetTasks[objectID]?.cancel()
++        scheduledTempTargetTasks.removeValue(forKey: objectID)
++        await tempTargetStorage.deleteTempTargetPreset(objectID)
++        setupScheduledTempTargetsArray()
++    }
++
++    /// Restarts in-memory Tasks for any pending scheduled temp targets after app relaunch.
++    func restartPendingScheduledTempTargetTask() {
++        Task {
++            do {
++                let ids = try await tempTargetStorage.fetchScheduledTempTargets()
++                for id in ids {
++                    guard let tempTarget = try? viewContext.existingObject(with: id) as? TempTargetStored,
++                          let scheduledDate = tempTarget.date,
++                          scheduledDate > Date() else { continue }
++                    scheduledTempTargetTasks[id]?.cancel()
++                    scheduledTempTargetTasks[id] = Task {
++                        await waitUntilDate(scheduledDate)
++                        guard !Task.isCancelled else { return }
++                        await enableScheduledTempTarget(for: scheduledDate)
++                    }
++                }
++            } catch {
++                debug(.default, "\(DebuggingIdentifiers.failed) Failed to restart pending scheduled temp target tasks: \(error)")
++            }
++        }
++    }
++
++    /// Sends a local notification for a scheduled Temp Target activation.
++    func sendScheduledTempTargetNotification(name: String, scheduledDate: Date) async {
++        let content = UNMutableNotificationContent()
++        content.title = String(localized: "Scheduled Temp Target")
++        content.body = name.isEmpty
++            ? String(localized: "A temp target is scheduled to start soon.")
++            : String(format: String(localized: "Temp target \"%@\" is scheduled to start soon."), name)
++        content.sound = .default
++        content.userInfo[NotificationAction.key] = NotificationAction.scheduledTempTargetActivation.rawValue
++        content.userInfo["scheduledDate"] = scheduledDate.timeIntervalSince1970
++
++        let triggerDate = Calendar.current.dateComponents(
++            [.year, .month, .day, .hour, .minute, .second],
++            from: scheduledDate
++        )
++        let trigger = UNCalendarNotificationTrigger(dateMatching: triggerDate, repeats: false)
++        let request = UNNotificationRequest(
++            identifier: "scheduledTempTargetActivation",
++            content: content,
++            trigger: trigger
++        )
++
++        do {
++            try await UNUserNotificationCenter.current().add(request)
++        } catch {
++            debug(.default, "\(DebuggingIdentifiers.failed) Failed to schedule temp target notification: \(error)")
+         }
+     }
+ 
+@@ -429,3 +489,11 @@ enum TempTargetSensitivityAdjustmentType: String, CaseIterable {
+     case standard = "Standard"
+     case slider = "Custom"
+ }
++
++extension Adjustments.StateModel: ScheduledTempTargetActivationObserver {
++    func scheduledTempTargetShouldActivate(for date: Date) {
++        Task {
++            await enableScheduledTempTarget(for: date)
++        }
++    }
++}
+diff --git a/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel.swift b/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel.swift
+index b303d13b6..5a4740571 100644
+--- a/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel.swift
++++ b/Trio/Sources/Modules/Adjustments/AdjustmentsStateModel.swift
+@@ -30,6 +30,8 @@ extension Adjustments {
+         var overrideName: String = ""
+         var isPreset: Bool = false
+         var overridePresets: [OverrideStored] = []
++        var scheduledOverrides: [OverrideStored] = []
++        var scheduledOverrideTasks: [NSManagedObjectID: Task<Void, Never>] = [:]
+         var advancedSettings: Bool = false
+         var isfAndCr: Bool = true
+         var isf: Bool = true
+@@ -60,6 +62,7 @@ extension Adjustments {
+         var newPresetName = ""
+         var tempTargetPresets: [TempTargetStored] = []
+         var scheduledTempTargets: [TempTargetStored] = []
++        var scheduledTempTargetTasks: [NSManagedObjectID: Task<Void, Never>] = [:]
+         var percentage: Double = 100
+         var autosensMax: Decimal = 1.2
+         var halfBasalTarget: Decimal = 160
+@@ -88,6 +91,8 @@ extension Adjustments {
+             setupSettings()
+             broadcaster.register(SettingsObserver.self, observer: self)
+             broadcaster.register(PreferencesObserver.self, observer: self)
++            broadcaster.register(ScheduledOverrideActivationObserver.self, observer: self)
++            broadcaster.register(ScheduledTempTargetActivationObserver.self, observer: self)
+ 
+             Task {
+                 await withTaskGroup(of: Void.self) { group in
+@@ -95,6 +100,10 @@ extension Adjustments {
+                     group.addTask { self.setupTempTargetPresetsArray() }
+                     group.addTask { self.updateLatestOverrideConfiguration() }
+                     group.addTask { self.updateLatestTempTargetConfiguration() }
++                    group.addTask { self.setupScheduledOverridesArray() }
++                    group.addTask { self.restartPendingScheduledOverrideTask() }
++                    group.addTask { self.setupScheduledTempTargetsArray() }
++                    group.addTask { self.restartPendingScheduledTempTargetTask() }
+                 }
+             }
+         }
+diff --git a/Trio/Sources/Modules/Adjustments/View/Overrides/AdjustmentsRootView+Overrides.swift b/Trio/Sources/Modules/Adjustments/View/Overrides/AdjustmentsRootView+Overrides.swift
+index 002c9226c..85d0e560f 100644
+--- a/Trio/Sources/Modules/Adjustments/View/Overrides/AdjustmentsRootView+Overrides.swift
++++ b/Trio/Sources/Modules/Adjustments/View/Overrides/AdjustmentsRootView+Overrides.swift
+@@ -3,13 +3,19 @@ import SwiftUI
+ 
+ extension Adjustments.RootView {
+     @ViewBuilder func overrides() -> some View {
+-        if state.isOverrideEnabled, state.activeOverrideName.isNotEmpty {
+-            currentActiveAdjustment
+-        }
+-        if state.overridePresets.isNotEmpty {
+-            overridePresets
+-        } else {
+-            defaultText
++        Group {
++            if state.isOverrideEnabled, state.activeOverrideName.isNotEmpty {
++                currentActiveAdjustment
++            }
++            if !state.scheduledOverrides.isEmpty {
++                scheduledOverrideBanner
++                scheduledOverridesSection
++            }
++            if state.overridePresets.isNotEmpty {
++                overridePresets
++            } else {
++                defaultText
++            }
+         }
+     }
+ 
+@@ -103,6 +109,15 @@ extension Adjustments.RootView {
+                 Label("Edit", systemImage: "pencil")
+                     .tint(.blue)
+             })
++            Button {
++                selectedOverride = preset
++                state.showOverrideEditSheet = true
++            } label: {
++                Label(
++                    String(localized: "Schedule"),
++                    systemImage: "clock"
++                )
++            }
+         }
+     }
+ 
+@@ -247,4 +262,78 @@ extension Adjustments.RootView {
+             }
+         }
+     }
++
++    private var scheduledOverridesSection: some View {
++        Section {
++            ForEach(state.scheduledOverrides) { override in
++                HStack {
++                    Text(override.name ?? "Scheduled Override")
++                    Spacer()
++                    if let date = override.date {
++                        Text("Starts in \(formattedTimeRemaining(date.timeIntervalSinceNow))")
++                            .foregroundStyle(.secondary)
++                            .font(.caption)
++                    }
++                }
++                .contentShape(Rectangle())
++                .onTapGesture {
++                    selectedOverride = override
++                    state.showOverrideEditSheet = true
++                }
++                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
++                    Button(role: .destructive) {
++                        Task { await state.cancelScheduledOverride(override.objectID) }
++                    } label: {
++                        Label(
++                            String(localized: "Cancel"),
++                            systemImage: "xmark.circle.fill"
++                        )
++                    }
++                }
++            }
++            .listRowBackground(Color.chart)
++        } header: {
++            Text("Scheduled Overrides")
++        }
++    }
++
++    private var scheduledOverrideBanner: some View {
++        ForEach(state.scheduledOverrides) { override in
++            Section {
++                HStack {
++                    Text(
++                        "\(override.name ?? "Override") " +
++                            String(localized: "is scheduled for") +
++                            " \(formattedScheduledTime(for: override))"
++                    )
++                    .foregroundStyle(.white)
++                    Spacer()
++                    Button {
++                        Task {
++                            await state.cancelScheduledOverride(override.objectID)
++                        }
++                    } label: {
++                        Text(String(localized: "Cancel Future Override"))
++                            .foregroundStyle(.white)
++                            .bold()
++                    }
++                    .buttonStyle(.plain)
++                }
++                .contentShape(Rectangle())
++                .onTapGesture {
++                    selectedOverride = override
++                    state.showOverrideEditSheet = true
++                }
++            }
++            .listRowBackground(Color.purple.opacity(0.8))
++        }
++    }
++
++    private func formattedScheduledTime(for override: OverrideStored) -> String {
++        guard let date = override.date else { return "" }
++        let formatter = DateFormatter()
++        formatter.timeStyle = .short
++        formatter.dateStyle = .none
++        return formatter.string(from: date)
++    }
+ }
+diff --git a/Trio/Sources/Modules/Adjustments/View/Overrides/EditOverrideForm.swift b/Trio/Sources/Modules/Adjustments/View/Overrides/EditOverrideForm.swift
+index b25834923..c3b208f0a 100644
+--- a/Trio/Sources/Modules/Adjustments/View/Overrides/EditOverrideForm.swift
++++ b/Trio/Sources/Modules/Adjustments/View/Overrides/EditOverrideForm.swift
+@@ -26,6 +26,7 @@ struct EditOverrideForm: View {
+     @State private var selectedIsfCrOption: IsfAndOrCrOptions
+     @State private var selectedDisableSmbOption: DisableSmbOptions
+     @State private var hasChanges = false
++    @State private var scheduledDate: Date = Date()
+     @State private var isEditing = false
+     @State private var target_override = false
+     @State private var percentageStep: Int = 1
+@@ -495,59 +496,145 @@ struct EditOverrideForm: View {
+                 }
+             }
+             .listRowBackground(Color.chart)
++
++            Section(header: Text("Schedule Override")) {
++                DatePicker(
++                    String(localized: "Start Time"),
++                    selection: $scheduledDate,
++                    in: Date().addingTimeInterval(60)...Date().addingTimeInterval(72 * 3600),
++                    displayedComponents: [.date, .hourAndMinute]
++                )
++                if let message = schedulingConflictMessage {
++                    Text(message)
++                        .font(.caption)
++                        .foregroundStyle(Color.red)
++                }
++            }
+         }
+     }
+ 
+     private var saveButton: some View {
+         let (isInvalid, errorMessage) = isOverrideInvalid()
++        let scheduleIsDisabled = scheduledDate <= Date()
+ 
+-        return Section(
+-            header:
+-            HStack {
+-                Spacer()
+-                Text(errorMessage ?? "").textCase(nil)
+-                    .foregroundColor(colorScheme == .dark ? .orange : .accentColor)
+-                Spacer()
+-            },
+-            content: {
+-                Button(action: {
+-                    saveChanges()
++        return Group {
++            Section(
++                header:
++                HStack {
++                    Spacer()
++                    Text(errorMessage ?? "").textCase(nil)
++                        .foregroundColor(colorScheme == .dark ? .orange : .accentColor)
++                    Spacer()
++                },
++                content: {
++                    Button(action: {
++                        saveChanges()
++
++                        Task {
++                            do {
++                                guard let moc = override.managedObjectContext else { return }
++                                guard moc.hasChanges else { return }
++                                try moc.save()
++
++                                try await state.nightscoutManager.uploadProfiles()
++
++                                // Disable previous active Override
++                                if let currentActiveOverride = state.currentActiveOverride {
++                                    Task {
++                                        await state.disableAllActiveOverrides(
++                                            except: currentActiveOverride.objectID,
++                                            createOverrideRunEntry: false
++                                        )
++                                        // Update View
++                                        state.updateLatestOverrideConfiguration()
++                                    }
++                                }
++
++                                hasChanges = false
++                                presentationMode.wrappedValue.dismiss()
++                            } catch {
++                                debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to edit Override")
++                            }
++                        }
++                    }, label: {
++                        Text("Save Override")
++                    })
++                        .disabled(isInvalid) // Disable button if changes are invalid
++                        .frame(maxWidth: .infinity, alignment: .center)
++                        .tint(.white)
++                }
++            )
++            .listRowBackground(isInvalid ? Color(.systemGray4) : Color(.systemBlue))
+ 
++            Section {
++                Button(action: {
+                     Task {
+                         do {
+-                            guard let moc = override.managedObjectContext else { return }
+-                            guard moc.hasChanges else { return }
+-                            try moc.save()
+-
+-                            try await state.nightscoutManager.uploadProfiles()
+-
+-                            // Disable previous active Override
+-                            if let currentActiveOverride = state.currentActiveOverride {
+-                                Task {
+-                                    await state.disableAllActiveOverrides(
+-                                        except: currentActiveOverride.objectID,
+-                                        createOverrideRunEntry: false
+-                                    )
+-                                    // Update View
+-                                    state.updateLatestOverrideConfiguration()
+-                                }
++                            let newOverride = Override(
++                                name: name,
++                                enabled: false,
++                                date: scheduledDate,
++                                duration: duration,
++                                indefinite: indefinite,
++                                percentage: percentage,
++                                smbIsOff: smbIsOff,
++                                isPreset: false,
++                                id: "",
++                                overrideTarget: target_override,
++                                target: target ?? 0,
++                                advancedSettings: advancedSettings,
++                                isfAndCr: isfAndCr,
++                                isf: isf,
++                                cr: cr,
++                                smbIsScheduledOff: smbIsScheduledOff,
++                                start: start ?? 0,
++                                end: end ?? 0,
++                                smbMinutes: smbMinutes ?? state.defaultSmbMinutes,
++                                uamMinutes: uamMinutes ?? state.defaultUamMinutes
++                            )
++                            try await state.overrideStorage.storeOverride(override: newOverride)
++
++                            let ids = try await state.overrideStorage.fetchScheduledOverride(for: scheduledDate)
++                            guard let newID = ids.first else {
++                                debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to find newly stored scheduled override")
++                                return
+                             }
+-
+-                            hasChanges = false
++                            state.scheduleOverride(objectID: newID, for: scheduledDate)
+                             presentationMode.wrappedValue.dismiss()
+                         } catch {
+-                            debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to edit Override")
++                            debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to schedule override")
+                         }
+                     }
+                 }, label: {
+-                    Text("Save Override")
++                    Text("Schedule Override")
+                 })
+-                    .disabled(isInvalid) // Disable button if changes are invalid
+-                    .frame(maxWidth: .infinity, alignment: .center)
+-                    .tint(.white)
++                .disabled(scheduleIsDisabled || hasSchedulingConflict)
++                .frame(maxWidth: .infinity, alignment: .center)
++                .tint(.white)
+             }
+-        )
+-        .listRowBackground(isInvalid ? Color(.systemGray4) : Color(.systemBlue))
++            .listRowBackground(scheduleIsDisabled ? Color(.systemGray4) : Color(.systemBlue))
++        }
++    }
++
++    private var hasSchedulingConflict: Bool {
++        let newStart = scheduledDate
++        let newDurationSeconds = indefinite ? Double.infinity : Double(truncating: duration as NSDecimalNumber) * 60
++        let newEnd = indefinite ? Date.distantFuture : newStart.addingTimeInterval(newDurationSeconds)
++
++        for existing in state.scheduledOverrides {
++            guard let existingStart = existing.date else { continue }
++            let existingDurationSeconds = existing.indefinite ? Double.infinity : (existing.duration?.doubleValue ?? 0) * 60
++            let existingEnd = existing.indefinite ? Date.distantFuture : existingStart.addingTimeInterval(existingDurationSeconds)
++
++            let overlaps = newStart < existingEnd && newEnd > existingStart
++            if overlaps { return true }
++        }
++        return false
++    }
++
++    private var schedulingConflictMessage: String? {
++        guard hasSchedulingConflict else { return nil }
++        return String(localized: "Selected time conflicts with an existing scheduled override.")
+     }
+ 
+     private func isOverrideInvalid() -> (Bool, String?) {
+diff --git a/Trio/Sources/Modules/Adjustments/View/TempTargets/AdjustmentsRootView+TempTargets.swift b/Trio/Sources/Modules/Adjustments/View/TempTargets/AdjustmentsRootView+TempTargets.swift
+index ccc61a7ba..28e1e4447 100644
+--- a/Trio/Sources/Modules/Adjustments/View/TempTargets/AdjustmentsRootView+TempTargets.swift
++++ b/Trio/Sources/Modules/Adjustments/View/TempTargets/AdjustmentsRootView+TempTargets.swift
+@@ -7,6 +7,7 @@ extension Adjustments.RootView {
+             currentActiveAdjustment
+         }
+         if state.scheduledTempTargets.isNotEmpty {
++            scheduledTempTargetBanner
+             scheduledTempTargets
+         }
+         if state.tempTargetPresets.isNotEmpty {
+@@ -16,6 +17,38 @@ extension Adjustments.RootView {
+         }
+     }
+ 
++    private var scheduledTempTargetBanner: some View {
++        ForEach(state.scheduledTempTargets) { tempTarget in
++            Section {
++                HStack {
++                    Text(
++                        "\(tempTarget.name ?? "Temp Target") " +
++                            String(localized: "is scheduled for") +
++                            " \(formattedScheduledTempTargetTime(for: tempTarget))"
++                    )
++                    .foregroundStyle(.white)
++                    Spacer()
++                    Button {
++                        Task {
++                            await state.cancelScheduledTempTarget(tempTarget.objectID)
++                        }
++                    } label: {
++                        Text(String(localized: "Cancel Future Temp Target"))
++                            .foregroundStyle(.white)
++                            .bold()
++                    }
++                    .buttonStyle(.plain)
++                }
++                .contentShape(Rectangle())
++                .onTapGesture {
++                    selectedTempTarget = tempTarget
++                    state.showTempTargetEditSheet = true
++                }
++            }
++            .listRowBackground(Color.purple.opacity(0.8))
++        }
++    }
++
+     private var scheduledTempTargets: some View {
+         Section {
+             ForEach(state.scheduledTempTargets) { tempTarget in
+@@ -23,6 +56,16 @@ extension Adjustments.RootView {
+                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                         actionButtonsForTempTargets(for: tempTarget)
+                     }
++                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
++                        Button(role: .destructive) {
++                            Task { await state.cancelScheduledTempTarget(tempTarget.objectID) }
++                        } label: {
++                            Label(
++                                String(localized: "Cancel"),
++                                systemImage: "xmark.circle.fill"
++                            )
++                        }
++                    }
+             }
+             .listRowBackground(Color.chart)
+         } header: {
+@@ -92,6 +135,15 @@ extension Adjustments.RootView {
+                 Label("Edit", systemImage: "pencil")
+                     .tint(.blue)
+             })
++            Button {
++                selectedTempTarget = tempTarget
++                state.showTempTargetEditSheet = true
++            } label: {
++                Label(
++                    String(localized: "Schedule"),
++                    systemImage: "clock"
++                )
++            }
+         }
+     }
+ 
+@@ -159,6 +211,14 @@ extension Adjustments.RootView {
+         }
+     }
+ 
++    private func formattedScheduledTempTargetTime(for tempTarget: TempTargetStored) -> String {
++        guard let date = tempTarget.date else { return "" }
++        let formatter = DateFormatter()
++        formatter.timeStyle = .short
++        formatter.dateStyle = .none
++        return formatter.string(from: date)
++    }
++
+     private func tempTargetView(
+         for tempTarget: TempTargetStored,
+         showCheckmark: Bool = false,
+diff --git a/Trio/Sources/Modules/Adjustments/View/TempTargets/EditTempTargetForm.swift b/Trio/Sources/Modules/Adjustments/View/TempTargets/EditTempTargetForm.swift
+index e0780a856..445cb3a16 100644
+--- a/Trio/Sources/Modules/Adjustments/View/TempTargets/EditTempTargetForm.swift
++++ b/Trio/Sources/Modules/Adjustments/View/TempTargets/EditTempTargetForm.swift
+@@ -25,6 +25,7 @@ struct EditTempTargetForm: View {
+     @State private var isUsingSlider = false
+     @State private var isPreset = false
+     @State private var isEnabled = false
++    @State private var scheduledDate: Date = Date()
+ 
+     init(tempTargetToEdit: TempTargetStored, state: Adjustments.StateModel) {
+         tempTarget = tempTargetToEdit
+@@ -61,6 +62,7 @@ struct EditTempTargetForm: View {
+             List {
+                 editTempTarget()
+                 saveButton
++                scheduleTempTargetButton
+             }
+             .listSectionSpacing(10)
+             .padding(.top, 30)
+@@ -320,9 +322,74 @@ struct EditTempTargetForm: View {
+                     }
+                 }.listRowBackground(Color.clear)
+             }
++
++            Section(header: Text("Schedule Temp Target")) {
++                DatePicker(
++                    String(localized: "Start Time"),
++                    selection: $scheduledDate,
++                    in: Date().addingTimeInterval(60)...Date().addingTimeInterval(72 * 3600),
++                    displayedComponents: [.date, .hourAndMinute]
++                )
++                if let message = schedulingConflictMessage {
++                    Text(message)
++                        .font(.caption)
++                        .foregroundStyle(Color.red)
++                }
++            }
++            .listRowBackground(Color.chart)
+         }
+     }
+ 
++    private var scheduleTempTargetButton: some View {
++        Button(action: {
++            Task {
++                do {
++                    let newTempTarget = TempTarget(
++                        name: name.isEmpty ? "Custom Target" : name,
++                        createdAt: scheduledDate,
++                        targetTop: target,
++                        targetBottom: target,
++                        duration: duration,
++                        enteredBy: TempTarget.local,
++                        reason: TempTarget.custom,
++                        isPreset: false,
++                        enabled: false,
++                        halfBasalTarget: halfBasalTarget
++                    )
++                    try await state.tempTargetStorage.storeTempTarget(tempTarget: newTempTarget)
++
++                    let ids = try await state.tempTargetStorage.fetchScheduledTempTarget(for: scheduledDate)
++                    guard let newID = ids.first else {
++                        debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to find newly stored scheduled temp target")
++                        return
++                    }
++
++                    state.scheduledTempTargetTasks[newID]?.cancel()
++                    state.scheduledTempTargetTasks[newID] = Task {
++                        await state.waitUntilDate(scheduledDate)
++                        guard !Task.isCancelled else { return }
++                        await state.enableScheduledTempTarget(for: scheduledDate)
++                    }
++                    state.setupScheduledTempTargetsArray()
++                    Task {
++                        await state.sendScheduledTempTargetNotification(
++                            name: name,
++                            scheduledDate: scheduledDate
++                        )
++                    }
++                    presentationMode.wrappedValue.dismiss()
++                } catch {
++                    debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to schedule temp target")
++                }
++            }
++        }, label: {
++            Text("Schedule Temp Target")
++        })
++        .disabled(scheduledDate <= Date() || hasSchedulingConflict)
++        .frame(maxWidth: .infinity, alignment: .center)
++        .listRowBackground(scheduledDate <= Date() || hasSchedulingConflict ? Color(UIColor.systemGray4) : Color(UIColor.systemBlue))
++    }
++
+     private var saveButton: some View {
+         HStack {
+             Spacer()
+@@ -398,6 +465,26 @@ struct EditTempTargetForm: View {
+         }
+     }
+ 
++    private var hasSchedulingConflict: Bool {
++        let newStart = scheduledDate
++        let newDurationSeconds = Double(truncating: duration as NSDecimalNumber) * 60
++        let newEnd = newStart.addingTimeInterval(newDurationSeconds)
++
++        for existing in state.scheduledTempTargets {
++            guard let existingStart = existing.date else { continue }
++            let existingDurationSeconds = (existing.duration?.doubleValue ?? 0) * 60
++            let existingEnd = existingStart.addingTimeInterval(existingDurationSeconds)
++            let overlaps = newStart < existingEnd && newEnd > existingStart
++            if overlaps { return true }
++        }
++        return false
++    }
++
++    private var schedulingConflictMessage: String? {
++        guard hasSchedulingConflict else { return nil }
++        return String(localized: "Selected time conflicts with an existing scheduled temp target.")
++    }
++
+     private func toggleScrollWheel(_ toggle: Bool) -> Bool {
+         displayPickerDuration = false
+         displayPickerTarget = false
+diff --git a/Trio/Sources/Modules/Home/HomeStateModel+Setup/OverrideSetup.swift b/Trio/Sources/Modules/Home/HomeStateModel+Setup/OverrideSetup.swift
+index 106009cc2..4cbaaa7f9 100644
+--- a/Trio/Sources/Modules/Home/HomeStateModel+Setup/OverrideSetup.swift
++++ b/Trio/Sources/Modules/Home/HomeStateModel+Setup/OverrideSetup.swift
+@@ -16,6 +16,7 @@ extension Home.StateModel {
+                 debug(.default, "Unexpected error in setupOverrides: \(error)")
+             }
+         }
++        fetchScheduledOverrides()
+     }
+ 
+     private func fetchOverrides() async throws -> [NSManagedObjectID] {
+@@ -39,6 +40,32 @@ extension Home.StateModel {
+         overrides = objects
+     }
+ 
++    func fetchScheduledOverrides() {
++        Task {
++            do {
++                let results = try await CoreDataStack.shared.fetchEntitiesAsync(
++                    ofType: OverrideStored.self,
++                    onContext: overrideFetchContext,
++                    predicate: NSPredicate(
++                        format: "enabled == %@ AND isPreset == %@ AND date > %@",
++                        false as NSNumber,
++                        false as NSNumber,
++                        Date() as NSDate
++                    ),
++                    key: "date",
++                    ascending: true
++                )
++                await updateScheduledOverrides(with: results as? [NSManagedObject] ?? [])
++            } catch {
++                debug(.default, "\(DebuggingIdentifiers.failed) Failed to fetch scheduled overrides: \(error)")
++            }
++        }
++    }
++
++    @MainActor private func updateScheduledOverrides(with results: [NSManagedObject]) async {
++        scheduledOverrides = results.compactMap { $0 as? OverrideStored }
++    }
++
+     // Setup expired Overrides
+     func setupOverrideRunStored() {
+         Task {
+diff --git a/Trio/Sources/Modules/Home/HomeStateModel.swift b/Trio/Sources/Modules/Home/HomeStateModel.swift
+index d0d2d78b9..70c0999fa 100644
+--- a/Trio/Sources/Modules/Home/HomeStateModel.swift
++++ b/Trio/Sources/Modules/Home/HomeStateModel.swift
+@@ -98,6 +98,7 @@ extension Home {
+         var batteryFromPersistence: [OpenAPS_Battery] = []
+         var lastPumpBolus: PumpEventStored?
+         var overrides: [OverrideStored] = []
++        var scheduledOverrides: [OverrideStored] = []
+         var overrideRunStored: [OverrideRunStored] = []
+         var tempTargetStored: [TempTargetStored] = []
+         var tempTargetRunStored: [TempTargetRunStored] = []
+diff --git a/Trio/Sources/Modules/Home/View/Chart/ChartElements/OverrideView.swift b/Trio/Sources/Modules/Home/View/Chart/ChartElements/OverrideView.swift
+index 8578abc88..72b6697ae 100644
+--- a/Trio/Sources/Modules/Home/View/Chart/ChartElements/OverrideView.swift
++++ b/Trio/Sources/Modules/Home/View/Chart/ChartElements/OverrideView.swift
+@@ -6,6 +6,7 @@ import SwiftUI
+ struct OverrideView: ChartContent {
+     var state: Home.StateModel
+     let overrides: [OverrideStored]
++    let scheduledOverrides: [OverrideStored]
+     let overrideRunStored: [OverrideRunStored]
+     let units: GlucoseUnits
+     let viewContext: NSManagedObjectContext
+@@ -13,6 +14,7 @@ struct OverrideView: ChartContent {
+     var body: some ChartContent {
+         drawActiveOverrides()
+         drawOverrideRunStored()
++        drawScheduledOverrides()
+     }
+ 
+     private func drawActiveOverrides() -> some ChartContent {
+@@ -60,6 +62,30 @@ struct OverrideView: ChartContent {
+         }
+     }
+ 
++    @ChartContentBuilder
++    private func drawScheduledOverrides() -> some ChartContent {
++        ForEach(scheduledOverrides, id: \.objectID) { (override: OverrideStored) in
++            if let startDate = override.date {
++                let endDate: Date = override.indefinite
++                    ? state.endMarker
++                    : (MainChartHelper.calculateDuration(
++                        objectID: override.objectID,
++                        attribute: "duration",
++                        context: viewContext
++                    ).map { startDate.addingTimeInterval($0) } ?? state.endMarker)
++
++                let target = getOverrideTarget(override: override)
++                RuleMark(
++                    xStart: .value("Start", startDate),
++                    xEnd: .value("End", endDate),
++                    y: .value("Target", target)
++                )
++                .lineStyle(StrokeStyle(lineWidth: 8))
++                .foregroundStyle(Color.purple.opacity(0.15))
++            }
++        }
++    }
++
+     // Handle Overrides where no Target is provided
+     private func getOverrideTarget(override: OverrideStored) -> Decimal {
+         if let target = MainChartHelper
+diff --git a/Trio/Sources/Modules/Home/View/Chart/MainChartView.swift b/Trio/Sources/Modules/Home/View/Chart/MainChartView.swift
+index 34db04766..eb1ede743 100644
+--- a/Trio/Sources/Modules/Home/View/Chart/MainChartView.swift
++++ b/Trio/Sources/Modules/Home/View/Chart/MainChartView.swift
+@@ -124,6 +124,7 @@ extension MainChartView {
+                 OverrideView(
+                     state: state,
+                     overrides: state.overrides,
++                    scheduledOverrides: state.scheduledOverrides,
+                     overrideRunStored: state.overrideRunStored,
+                     units: state.units,
+                     viewContext: context
+diff --git a/Trio/Sources/Services/UserNotifications/UserNotificationsManager.swift b/Trio/Sources/Services/UserNotifications/UserNotificationsManager.swift
+index be736a182..acbf18d52 100644
+--- a/Trio/Sources/Services/UserNotifications/UserNotificationsManager.swift
++++ b/Trio/Sources/Services/UserNotifications/UserNotificationsManager.swift
+@@ -25,6 +25,8 @@ enum NotificationAction: String {
+ 
+     case snooze
+     case pumpConfig
++    case scheduledOverrideActivation
++    case scheduledTempTargetActivation
+     case none
+ }
+ 
+@@ -47,6 +49,14 @@ protocol SnoozeObserver {
+     @MainActor func snoozeDidChange(_ untilDate: Date)
+ }
+ 
++protocol ScheduledOverrideActivationObserver {
++    func scheduledOverrideShouldActivate(for date: Date)
++}
++
++protocol ScheduledTempTargetActivationObserver {
++    func scheduledTempTargetShouldActivate(for date: Date)
++}
++
+ final class BaseUserNotificationsManager: NSObject, UserNotificationsManager, Injectable {
+     enum Identifier: String {
+         case glucoseNotification = "Trio.glucoseNotification"
+@@ -715,6 +725,24 @@ extension BaseUserNotificationsManager: UNUserNotificationCenterDelegate {
+                     action: .pumpConfig
+                 )
+                 self.router.alertMessage.send(messageCont)
++            case .scheduledOverrideActivation:
++                if let dateInterval = response.notification.request.content.userInfo["scheduledDate"] as? TimeInterval {
++                    let scheduledDate = Date(timeIntervalSince1970: dateInterval)
++                    DispatchQueue.main.async {
++                        self.broadcaster.notify(ScheduledOverrideActivationObserver.self, on: .main) {
++                            $0.scheduledOverrideShouldActivate(for: scheduledDate)
++                        }
++                    }
++                }
++            case .scheduledTempTargetActivation:
++                if let dateInterval = response.notification.request.content.userInfo["scheduledDate"] as? TimeInterval {
++                    let scheduledDate = Date(timeIntervalSince1970: dateInterval)
++                    DispatchQueue.main.async {
++                        self.broadcaster.notify(ScheduledTempTargetActivationObserver.self, on: .main) {
++                            $0.scheduledTempTargetShouldActivate(for: scheduledDate)
++                        }
++                    }
++                }
+             default: break
+             }
+         }

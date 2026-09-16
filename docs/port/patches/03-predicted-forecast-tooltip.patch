@@ -1,0 +1,925 @@
+diff --git a/CLAUDE.md b/CLAUDE.md
+index f365ecf94..6cdcabf03 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -40,6 +40,17 @@ This is safety-critical software. Trust in reported state must be verifiable, no
+ - **A `git rebase` that reports "patch already upstream" or "dropping commit" is NOT a push confirmation.** It only means the local commit was redundant against whatever the remote currently is — verify the remote separately.
+ - **If a push is rejected, stop and report the rejection.** Do not silently rebase-and-retry in a loop. Surface the conflict.
+ - **When asked to edit files in a session, do not commit or push unless explicitly asked.** Default to edits-only; the human will verify and commit themselves for anything touching dosing-adjacent code.
++- **Creating a new `.swift` file is not enough on its own.** Writing a new file to disk and committing it to git does NOT add it to the Xcode build target. It must also be registered in `Trio.xcodeproj/project.pbxproj` (in the `PBXBuildFile`, `PBXFileReference`, `PBXGroup`, and `PBXSourcesBuildPhase` sections), or the build will fail with "cannot find 'X' in scope" even though the file clearly exists and `grep`/`git log` checks pass. When creating a new file:
++  1. Find an existing sibling file in the same folder that is known to build correctly, and identify its exact lines in all four `project.pbxproj` sections above.
++  2. Generate two new unique 24-character hex UUIDs (one for `PBXFileReference`, one for `PBXBuildFile`) and confirm they don't already exist in the file.
++  3. Duplicate the sibling's four lines exactly, swapping in the new UUIDs and filename only.
++  4. Verify with `git diff --stat` and full `git diff` on `project.pbxproj` that the change is exactly 4 added lines with nothing removed or altered elsewhere, before committing.
++  5. Do not use a plist validator (e.g. Python's `plistlib`) to sanity-check `project.pbxproj` — it will report the file as invalid regardless of correctness, because `.pbxproj` uses the legacy NeXTSTEP/ASCII plist dialect, not XML or binary plist. This is a known false alarm, not a real signal.
++- **Verify remote sync before every build, not just before pushing.** Work happens across multiple devices/environments (e.g. a PC and a separate phone/Claude Code mobile session) on the same branches. Before triggering any build, always run `git fetch && git status` first:
++  - If local is **ahead** of origin → push before building, or the build won't contain that work.
++  - If local is **behind** → pull/rebase before building, or the build will be missing changes made elsewhere.
++  - If **diverged** → stop, do not build, reconcile via rebase first (check for conflicts, don't assume which side is correct).
++  - Only build once `git status` confirms the branch is up to date with its remote. A build that "still has the bug" may simply be missing a fix that was already correctly committed on a different device — check sync state before re-debugging.
+ 
+ ## Before Implementing
+ 
+diff --git a/Config.xcconfig b/Config.xcconfig
+index 013f1ad3e..c07422ba4 100644
+--- a/Config.xcconfig
++++ b/Config.xcconfig
+@@ -18,8 +18,8 @@ BUNDLE_IDENTIFIER = org.nightscout.$(DEVELOPMENT_TEAM).trio
+ TRIO_APP_GROUP_ID = group.org.nightscout.$(DEVELOPMENT_TEAM).trio.trio-app-group
+ 
+ // The developers set the version numbers, please leave them alone
+-APP_VERSION = 0.8.3
+-APP_DEV_VERSION = 0.8.3
++APP_VERSION = 0.8.4
++APP_DEV_VERSION = 0.8.4
+ APP_BUILD_NUMBER = 1
+ COPYRIGHT_NOTICE =
+ 
+diff --git a/Model/Classes+Properties/COBProjection+CoreDataClass.swift b/Model/Classes+Properties/COBProjection+CoreDataClass.swift
+new file mode 100644
+index 000000000..de3a3eacf
+--- /dev/null
++++ b/Model/Classes+Properties/COBProjection+CoreDataClass.swift
+@@ -0,0 +1,4 @@
++import CoreData
++import Foundation
++
++@objc(COBProjection) public class COBProjection: NSManagedObject {}
+diff --git a/Model/Classes+Properties/COBProjection+CoreDataProperties.swift b/Model/Classes+Properties/COBProjection+CoreDataProperties.swift
+new file mode 100644
+index 000000000..9a4739ce3
+--- /dev/null
++++ b/Model/Classes+Properties/COBProjection+CoreDataProperties.swift
+@@ -0,0 +1,31 @@
++import CoreData
++import Foundation
++
++public extension COBProjection {
++    @nonobjc class func fetchRequest() -> NSFetchRequest<COBProjection> {
++        NSFetchRequest<COBProjection>(entityName: "COBProjection")
++    }
++
++    @NSManaged var date: Date?
++    @NSManaged var id: UUID?
++    @NSManaged var cobProjectionValues: Set<COBProjectionValue>?
++    @NSManaged var orefDetermination: OrefDetermination?
++}
++
++// MARK: Generated accessors for cobProjectionValues
++
++public extension COBProjection {
++    @objc(addCobProjectionValuesObject:)
++    @NSManaged func addToCobProjectionValues(_ value: COBProjectionValue)
++
++    @objc(removeCobProjectionValuesObject:)
++    @NSManaged func removeFromCobProjectionValues(_ value: COBProjectionValue)
++
++    @objc(addCobProjectionValues:)
++    @NSManaged func addToCobProjectionValues(_ values: NSSet)
++
++    @objc(removeCobProjectionValues:)
++    @NSManaged func removeFromCobProjectionValues(_ values: NSSet)
++}
++
++extension COBProjection: Identifiable {}
+diff --git a/Model/Classes+Properties/COBProjectionValue+CoreDataClass.swift b/Model/Classes+Properties/COBProjectionValue+CoreDataClass.swift
+new file mode 100644
+index 000000000..201a37aa5
+--- /dev/null
++++ b/Model/Classes+Properties/COBProjectionValue+CoreDataClass.swift
+@@ -0,0 +1,4 @@
++import CoreData
++import Foundation
++
++@objc(COBProjectionValue) public class COBProjectionValue: NSManagedObject {}
+diff --git a/Model/Classes+Properties/COBProjectionValue+CoreDataProperties.swift b/Model/Classes+Properties/COBProjectionValue+CoreDataProperties.swift
+new file mode 100644
+index 000000000..a23101d56
+--- /dev/null
++++ b/Model/Classes+Properties/COBProjectionValue+CoreDataProperties.swift
+@@ -0,0 +1,14 @@
++import CoreData
++import Foundation
++
++public extension COBProjectionValue {
++    @nonobjc class func fetchRequest() -> NSFetchRequest<COBProjectionValue> {
++        NSFetchRequest<COBProjectionValue>(entityName: "COBProjectionValue")
++    }
++
++    @NSManaged var index: Int32
++    @NSManaged var value: NSDecimalNumber?
++    @NSManaged var cobProjection: COBProjection?
++}
++
++extension COBProjectionValue: Identifiable {}
+diff --git a/Model/Classes+Properties/IOBProjection+CoreDataClass.swift b/Model/Classes+Properties/IOBProjection+CoreDataClass.swift
+new file mode 100644
+index 000000000..ca656850f
+--- /dev/null
++++ b/Model/Classes+Properties/IOBProjection+CoreDataClass.swift
+@@ -0,0 +1,4 @@
++import CoreData
++import Foundation
++
++@objc(IOBProjection) public class IOBProjection: NSManagedObject {}
+diff --git a/Model/Classes+Properties/IOBProjection+CoreDataProperties.swift b/Model/Classes+Properties/IOBProjection+CoreDataProperties.swift
+new file mode 100644
+index 000000000..42b905258
+--- /dev/null
++++ b/Model/Classes+Properties/IOBProjection+CoreDataProperties.swift
+@@ -0,0 +1,31 @@
++import CoreData
++import Foundation
++
++public extension IOBProjection {
++    @nonobjc class func fetchRequest() -> NSFetchRequest<IOBProjection> {
++        NSFetchRequest<IOBProjection>(entityName: "IOBProjection")
++    }
++
++    @NSManaged var date: Date?
++    @NSManaged var id: UUID?
++    @NSManaged var iobProjectionValues: Set<IOBProjectionValue>?
++    @NSManaged var orefDetermination: OrefDetermination?
++}
++
++// MARK: Generated accessors for iobProjectionValues
++
++public extension IOBProjection {
++    @objc(addIobProjectionValuesObject:)
++    @NSManaged func addToIobProjectionValues(_ value: IOBProjectionValue)
++
++    @objc(removeIobProjectionValuesObject:)
++    @NSManaged func removeFromIobProjectionValues(_ value: IOBProjectionValue)
++
++    @objc(addIobProjectionValues:)
++    @NSManaged func addToIobProjectionValues(_ values: NSSet)
++
++    @objc(removeIobProjectionValues:)
++    @NSManaged func removeFromIobProjectionValues(_ values: NSSet)
++}
++
++extension IOBProjection: Identifiable {}
+diff --git a/Model/Classes+Properties/IOBProjectionValue+CoreDataClass.swift b/Model/Classes+Properties/IOBProjectionValue+CoreDataClass.swift
+new file mode 100644
+index 000000000..313e66097
+--- /dev/null
++++ b/Model/Classes+Properties/IOBProjectionValue+CoreDataClass.swift
+@@ -0,0 +1,4 @@
++import CoreData
++import Foundation
++
++@objc(IOBProjectionValue) public class IOBProjectionValue: NSManagedObject {}
+diff --git a/Model/Classes+Properties/IOBProjectionValue+CoreDataProperties.swift b/Model/Classes+Properties/IOBProjectionValue+CoreDataProperties.swift
+new file mode 100644
+index 000000000..62956a2d9
+--- /dev/null
++++ b/Model/Classes+Properties/IOBProjectionValue+CoreDataProperties.swift
+@@ -0,0 +1,14 @@
++import CoreData
++import Foundation
++
++public extension IOBProjectionValue {
++    @nonobjc class func fetchRequest() -> NSFetchRequest<IOBProjectionValue> {
++        NSFetchRequest<IOBProjectionValue>(entityName: "IOBProjectionValue")
++    }
++
++    @NSManaged var index: Int32
++    @NSManaged var value: NSDecimalNumber?
++    @NSManaged var iobProjection: IOBProjection?
++}
++
++extension IOBProjectionValue: Identifiable {}
+diff --git a/Model/Classes+Properties/OrefDetermination+CoreDataProperties.swift b/Model/Classes+Properties/OrefDetermination+CoreDataProperties.swift
+index 576f92d07..9f8daad1e 100644
+--- a/Model/Classes+Properties/OrefDetermination+CoreDataProperties.swift
++++ b/Model/Classes+Properties/OrefDetermination+CoreDataProperties.swift
+@@ -38,6 +38,8 @@ public extension OrefDetermination {
+     @NSManaged var timestamp: Date?
+     @NSManaged var timestampEnacted: Date?
+     @NSManaged var forecasts: Set<Forecast>?
++    @NSManaged var iobProjections: Set<IOBProjection>?
++    @NSManaged var cobProjections: Set<COBProjection>?
+ }
+ 
+ // MARK: Generated accessors for forecasts
+@@ -56,4 +58,36 @@ public extension OrefDetermination {
+     @NSManaged func removeFromForecasts(_ values: NSSet)
+ }
+ 
++// MARK: Generated accessors for iobProjections
++
++public extension OrefDetermination {
++    @objc(addIobProjectionsObject:)
++    @NSManaged func addToIobProjections(_ value: IOBProjection)
++
++    @objc(removeIobProjectionsObject:)
++    @NSManaged func removeFromIobProjections(_ value: IOBProjection)
++
++    @objc(addIobProjections:)
++    @NSManaged func addToIobProjections(_ values: NSSet)
++
++    @objc(removeIobProjections:)
++    @NSManaged func removeFromIobProjections(_ values: NSSet)
++}
++
++// MARK: Generated accessors for cobProjections
++
++public extension OrefDetermination {
++    @objc(addCobProjectionsObject:)
++    @NSManaged func addToCobProjections(_ value: COBProjection)
++
++    @objc(removeCobProjectionsObject:)
++    @NSManaged func removeFromCobProjections(_ value: COBProjection)
++
++    @objc(addCobProjections:)
++    @NSManaged func addToCobProjections(_ values: NSSet)
++
++    @objc(removeCobProjections:)
++    @NSManaged func removeFromCobProjections(_ values: NSSet)
++}
++
+ extension OrefDetermination: Identifiable {}
+diff --git a/Model/TrioCoreDataPersistentContainer.xcdatamodeld/TrioCoreDataPersistentContainer.xcdatamodel/contents b/Model/TrioCoreDataPersistentContainer.xcdatamodeld/TrioCoreDataPersistentContainer.xcdatamodel/contents
+index daeafd6ae..139fda1ad 100644
+--- a/Model/TrioCoreDataPersistentContainer.xcdatamodeld/TrioCoreDataPersistentContainer.xcdatamodel/contents
++++ b/Model/TrioCoreDataPersistentContainer.xcdatamodeld/TrioCoreDataPersistentContainer.xcdatamodel/contents
+@@ -69,6 +69,28 @@
+         <attribute name="value" optional="YES" attributeType="Integer 32" defaultValueString="0.0" usesScalarValueType="YES"/>
+         <relationship name="forecast" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Forecast" inverseName="forecastValues" inverseEntity="Forecast"/>
+     </entity>
++    <entity name="IOBProjection" representedClassName="IOBProjection" syncable="YES">
++        <attribute name="date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
++        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
++        <relationship name="iobProjectionValues" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="IOBProjectionValue" inverseName="iobProjection" inverseEntity="IOBProjectionValue"/>
++        <relationship name="orefDetermination" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="OrefDetermination" inverseName="iobProjections" inverseEntity="OrefDetermination"/>
++    </entity>
++    <entity name="IOBProjectionValue" representedClassName="IOBProjectionValue" syncable="YES">
++        <attribute name="index" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
++        <attribute name="value" optional="YES" attributeType="Decimal" defaultValueString="0.0"/>
++        <relationship name="iobProjection" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="IOBProjection" inverseName="iobProjectionValues" inverseEntity="IOBProjectionValue"/>
++    </entity>
++    <entity name="COBProjection" representedClassName="COBProjection" syncable="YES">
++        <attribute name="date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
++        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
++        <relationship name="cobProjectionValues" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="COBProjectionValue" inverseName="cobProjection" inverseEntity="COBProjectionValue"/>
++        <relationship name="orefDetermination" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="OrefDetermination" inverseName="cobProjections" inverseEntity="OrefDetermination"/>
++    </entity>
++    <entity name="COBProjectionValue" representedClassName="COBProjectionValue" syncable="YES">
++        <attribute name="index" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
++        <attribute name="value" optional="YES" attributeType="Decimal" defaultValueString="0.0"/>
++        <relationship name="cobProjection" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="COBProjection" inverseName="cobProjectionValues" inverseEntity="COBProjectionValue"/>
++    </entity>
+     <entity name="GlucoseStored" representedClassName="GlucoseStored" syncable="YES">
+         <attribute name="date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+         <attribute name="direction" optional="YES" attributeType="String"/>
+@@ -151,6 +173,8 @@
+         <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+         <attribute name="timestampEnacted" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+         <relationship name="forecasts" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Forecast" inverseName="orefDetermination" inverseEntity="Forecast"/>
++        <relationship name="iobProjections" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="IOBProjection" inverseName="orefDetermination" inverseEntity="IOBProjection"/>
++        <relationship name="cobProjections" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="COBProjection" inverseName="orefDetermination" inverseEntity="COBProjection"/>
+         <fetchIndex name="byDate">
+             <fetchIndexElement property="deliverAt" type="Binary" order="descending"/>
+         </fetchIndex>
+diff --git a/Trio.xcodeproj/project.pbxproj b/Trio.xcodeproj/project.pbxproj
+index 66fa8fab5..d97bfa9ee 100644
+--- a/Trio.xcodeproj/project.pbxproj
++++ b/Trio.xcodeproj/project.pbxproj
+@@ -692,6 +692,14 @@
+ 		DDE179612C910127003CDDB7 /* StatsData+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE179412C910127003CDDB7 /* StatsData+CoreDataProperties.swift */; };
+ 		DDE179622C910127003CDDB7 /* Forecast+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE179422C910127003CDDB7 /* Forecast+CoreDataClass.swift */; };
+ 		DDE179632C910127003CDDB7 /* Forecast+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE179432C910127003CDDB7 /* Forecast+CoreDataProperties.swift */; };
++		EE4B288F5C5E5831BCAE0AB1 /* IOBProjection+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0B66F71501AAECFA84CCD3C /* IOBProjection+CoreDataClass.swift */; };
++		D02162F076BA35D2CCD23F5F /* IOBProjection+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C3EB84EBB7F6D855D76F6BB /* IOBProjection+CoreDataProperties.swift */; };
++		7F2E134CA33D4DEB623143CE /* IOBProjectionValue+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F7EF9ABF68CC151B0512264 /* IOBProjectionValue+CoreDataClass.swift */; };
++		C2F5DC43C3494A2DBF1DB7D7 /* IOBProjectionValue+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F37657EBECA2A2B0F859A4C /* IOBProjectionValue+CoreDataProperties.swift */; };
++		6A338206C69B8EA99B881E29 /* COBProjection+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F2BDB69BADA58E24D09F764 /* COBProjection+CoreDataClass.swift */; };
++		12F08FC4CF0C48B65D0AEC9C /* COBProjection+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6848F6C65979C0F6859C1774 /* COBProjection+CoreDataProperties.swift */; };
++		C6DEAF203DB9B0E25E5B7A88 /* COBProjectionValue+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EB1E080D375137428445243 /* COBProjectionValue+CoreDataClass.swift */; };
++		A530C17342C20429C09B22C4 /* COBProjectionValue+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 777AD73B6507FCE9820137FE /* COBProjectionValue+CoreDataProperties.swift */; };
+ 		DDE179662C910127003CDDB7 /* OpenAPS_Battery+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE179462C910127003CDDB7 /* OpenAPS_Battery+CoreDataClass.swift */; };
+ 		DDE179672C910127003CDDB7 /* OpenAPS_Battery+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE179472C910127003CDDB7 /* OpenAPS_Battery+CoreDataProperties.swift */; };
+ 		DDE179682C910127003CDDB7 /* TempBasalStored+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE179482C910127003CDDB7 /* TempBasalStored+CoreDataClass.swift */; };
+@@ -1557,6 +1565,14 @@
+ 		DDE179412C910127003CDDB7 /* StatsData+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsData+CoreDataProperties.swift"; sourceTree = "<group>"; };
+ 		DDE179422C910127003CDDB7 /* Forecast+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Forecast+CoreDataClass.swift"; sourceTree = "<group>"; };
+ 		DDE179432C910127003CDDB7 /* Forecast+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Forecast+CoreDataProperties.swift"; sourceTree = "<group>"; };
++		D0B66F71501AAECFA84CCD3C /* IOBProjection+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOBProjection+CoreDataClass.swift"; sourceTree = "<group>"; };
++		1C3EB84EBB7F6D855D76F6BB /* IOBProjection+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOBProjection+CoreDataProperties.swift"; sourceTree = "<group>"; };
++		8F7EF9ABF68CC151B0512264 /* IOBProjectionValue+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOBProjectionValue+CoreDataClass.swift"; sourceTree = "<group>"; };
++		3F37657EBECA2A2B0F859A4C /* IOBProjectionValue+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOBProjectionValue+CoreDataProperties.swift"; sourceTree = "<group>"; };
++		7F2BDB69BADA58E24D09F764 /* COBProjection+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "COBProjection+CoreDataClass.swift"; sourceTree = "<group>"; };
++		6848F6C65979C0F6859C1774 /* COBProjection+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "COBProjection+CoreDataProperties.swift"; sourceTree = "<group>"; };
++		8EB1E080D375137428445243 /* COBProjectionValue+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "COBProjectionValue+CoreDataClass.swift"; sourceTree = "<group>"; };
++		777AD73B6507FCE9820137FE /* COBProjectionValue+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "COBProjectionValue+CoreDataProperties.swift"; sourceTree = "<group>"; };
+ 		DDE179462C910127003CDDB7 /* OpenAPS_Battery+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OpenAPS_Battery+CoreDataClass.swift"; sourceTree = "<group>"; };
+ 		DDE179472C910127003CDDB7 /* OpenAPS_Battery+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OpenAPS_Battery+CoreDataProperties.swift"; sourceTree = "<group>"; };
+ 		DDE179482C910127003CDDB7 /* TempBasalStored+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TempBasalStored+CoreDataClass.swift"; sourceTree = "<group>"; };
+@@ -3761,6 +3777,14 @@
+ 				3B56079F2ECD62AC00C723C1 /* DeletedGlucoseStored+CoreDataProperties.swift */,
+ 				DDE179422C910127003CDDB7 /* Forecast+CoreDataClass.swift */,
+ 				DDE179432C910127003CDDB7 /* Forecast+CoreDataProperties.swift */,
++				D0B66F71501AAECFA84CCD3C /* IOBProjection+CoreDataClass.swift */,
++				1C3EB84EBB7F6D855D76F6BB /* IOBProjection+CoreDataProperties.swift */,
++				8F7EF9ABF68CC151B0512264 /* IOBProjectionValue+CoreDataClass.swift */,
++				3F37657EBECA2A2B0F859A4C /* IOBProjectionValue+CoreDataProperties.swift */,
++				7F2BDB69BADA58E24D09F764 /* COBProjection+CoreDataClass.swift */,
++				6848F6C65979C0F6859C1774 /* COBProjection+CoreDataProperties.swift */,
++				8EB1E080D375137428445243 /* COBProjectionValue+CoreDataClass.swift */,
++				777AD73B6507FCE9820137FE /* COBProjectionValue+CoreDataProperties.swift */,
+ 				DDE179382C910127003CDDB7 /* ForecastValue+CoreDataClass.swift */,
+ 				DDE179392C910127003CDDB7 /* ForecastValue+CoreDataProperties.swift */,
+ 				DDE179342C910127003CDDB7 /* LoopStatRecord+CoreDataClass.swift */,
+@@ -4896,6 +4920,14 @@
+ 				DDE179612C910127003CDDB7 /* StatsData+CoreDataProperties.swift in Sources */,
+ 				DDE179622C910127003CDDB7 /* Forecast+CoreDataClass.swift in Sources */,
+ 				DDE179632C910127003CDDB7 /* Forecast+CoreDataProperties.swift in Sources */,
++				EE4B288F5C5E5831BCAE0AB1 /* IOBProjection+CoreDataClass.swift in Sources */,
++				D02162F076BA35D2CCD23F5F /* IOBProjection+CoreDataProperties.swift in Sources */,
++				7F2E134CA33D4DEB623143CE /* IOBProjectionValue+CoreDataClass.swift in Sources */,
++				C2F5DC43C3494A2DBF1DB7D7 /* IOBProjectionValue+CoreDataProperties.swift in Sources */,
++				6A338206C69B8EA99B881E29 /* COBProjection+CoreDataClass.swift in Sources */,
++				12F08FC4CF0C48B65D0AEC9C /* COBProjection+CoreDataProperties.swift in Sources */,
++				C6DEAF203DB9B0E25E5B7A88 /* COBProjectionValue+CoreDataClass.swift in Sources */,
++				A530C17342C20429C09B22C4 /* COBProjectionValue+CoreDataProperties.swift in Sources */,
+ 				BDC531142D10611D00088832 /* AddContactImageSheet.swift in Sources */,
+ 				DDE179662C910127003CDDB7 /* OpenAPS_Battery+CoreDataClass.swift in Sources */,
+ 				DDE179672C910127003CDDB7 /* OpenAPS_Battery+CoreDataProperties.swift in Sources */,
+diff --git a/Trio/Sources/APS/OpenAPS/OpenAPS.swift b/Trio/Sources/APS/OpenAPS/OpenAPS.swift
+index 9ac98a75c..86afa5ea4 100644
+--- a/Trio/Sources/APS/OpenAPS/OpenAPS.swift
++++ b/Trio/Sources/APS/OpenAPS/OpenAPS.swift
+@@ -80,6 +80,54 @@ final class OpenAPS {
+                         }
+                     }
+             }
++
++            if let iobProjection = determination.iobProjection {
++                let iobProjectionEntity = IOBProjection(context: self.context)
++                iobProjectionEntity.id = UUID()
++                iobProjectionEntity.date = Date()
++                iobProjectionEntity.orefDetermination = newOrefDetermination
++
++                for (index, value) in iobProjection.enumerated() {
++                    let iobProjectionValue = IOBProjectionValue(context: self.context)
++                    iobProjectionValue.index = Int32(index)
++                    iobProjectionValue.value = NSDecimalNumber(decimal: value)
++                    iobProjectionEntity.addToIobProjectionValues(iobProjectionValue)
++                }
++                newOrefDetermination.addToIobProjections(iobProjectionEntity)
++            }
++
++            if let latestCarbDate = determination.latestCarbDate,
++               let cobDecimal = determination.cob, cobDecimal > 0,
++               let maxMealAbsorptionTime = determination.maxMealAbsorptionTime
++            {
++                let absorptionHours = Double(truncating: maxMealAbsorptionTime as NSDecimalNumber)
++                let windowEnd = latestCarbDate.addingTimeInterval(absorptionHours * 3600)
++                let determinationTime = newOrefDetermination.deliverAt ?? Date()
++
++                if determinationTime < windowEnd {
++                    let cobProjectionEntity = COBProjection(context: self.context)
++                    cobProjectionEntity.id = UUID()
++                    cobProjectionEntity.date = Date()
++                    cobProjectionEntity.orefDetermination = newOrefDetermination
++
++                    let totalWindow = windowEnd.timeIntervalSince(determinationTime)
++                    var index = 0
++                    var stepTime = determinationTime
++
++                    while stepTime < windowEnd {
++                        let remaining = windowEnd.timeIntervalSince(stepTime)
++                        let fraction = remaining / totalWindow
++                        let cobAtStep = Double(truncating: cobDecimal as NSDecimalNumber) * fraction
++                        let cobProjectionValue = COBProjectionValue(context: self.context)
++                        cobProjectionValue.index = Int32(index)
++                        cobProjectionValue.value = NSDecimalNumber(value: cobAtStep)
++                        cobProjectionEntity.addToCobProjectionValues(cobProjectionValue)
++                        index += 1
++                        stepTime = determinationTime.addingTimeInterval(Double(index) * 300)
++                    }
++                    newOrefDetermination.addToCobProjections(cobProjectionEntity)
++                }
++            }
+         }
+ 
+         // First save the current Determination to Core Data
+@@ -156,7 +204,7 @@ final class OpenAPS {
+         return jsonConverter.convertToJSON(algorithmGlucose)
+     }
+ 
+-    private func fetchAndProcessCarbs(additionalCarbs: Decimal? = nil, carbsDate: Date? = nil) async throws -> String {
++    private func fetchAndProcessCarbs(additionalCarbs: Decimal? = nil, carbsDate: Date? = nil) async throws -> (String, Date?) {
+         let results = try await CoreDataStack.shared.fetchEntitiesAsync(
+             ofType: CarbEntryStored.self,
+             onContext: context,
+@@ -165,7 +213,7 @@ final class OpenAPS {
+             ascending: false
+         )
+ 
+-        let json = try await context.perform {
++        let (json, latestCarbDate) = try await context.perform { () -> (String, Date?) in
+             guard let carbResults = results as? [CarbEntryStored] else {
+                 throw CoreDataError.fetchError(function: #function, file: #file)
+             }
+@@ -202,10 +250,10 @@ final class OpenAPS {
+                 }
+             }
+ 
+-            return jsonArray
++            return (jsonArray, carbResults.first?.date)
+         }
+ 
+-        return json
++        return (json, latestCarbDate)
+     }
+ 
+     private func fetchPumpHistoryObjectIDs() async throws -> [NSManagedObjectID]? {
+@@ -406,7 +454,7 @@ final class OpenAPS {
+         // Await the results of asynchronous tasks
+         let (
+             pumpHistoryJSON,
+-            carbsAsJSON,
++            (carbsAsJSON, latestCarbDate),
+             glucoseAsJSON,
+             trioCustomOrefVariables,
+             profile,
+@@ -449,6 +497,8 @@ final class OpenAPS {
+             storage.save(iob, as: Monitor.iob)
+         }
+ 
++        let iobEntryValues = [IOBEntry](from: iob)?.map(\.iob)
++
+         var preferences = await preferencesAsync
+ 
+         if !hasSufficientTdd, preferences.useNewFormula || (preferences.useNewFormula && preferences.sigmoid) {
+@@ -480,6 +530,13 @@ final class OpenAPS {
+             // AAPS does it the same way! we'll follow their example!
+             determination.timestamp = deliverAt
+ 
++            if let values = iobEntryValues, let predCount = determination.predictions?.iob?.count {
++                determination.iobProjection = Array(values.prefix(predCount))
++            }
++
++            determination.latestCarbDate = latestCarbDate
++            determination.maxMealAbsorptionTime = preferences.maxMealAbsorptionTime
++
+             if !simulation {
+                 // save to core data asynchronously
+                 await processDetermination(determination)
+@@ -575,7 +632,7 @@ final class OpenAPS {
+         async let getTempTargets = loadFileFromStorageAsync(name: Settings.tempTargets)
+ 
+         // Await the results of asynchronous tasks
+-        let (pumpHistoryJSON, carbsAsJSON, glucoseAsJSON, profile, basalProfile, tempTargets) = await (
++        let (pumpHistoryJSON, (carbsAsJSON, _), glucoseAsJSON, profile, basalProfile, tempTargets) = await (
+             try parsePumpHistory(await pumpHistoryObjectIDs),
+             try carbs,
+             try glucose,
+diff --git a/Trio/Sources/APS/Storage/DeterminationStorage.swift b/Trio/Sources/APS/Storage/DeterminationStorage.swift
+index 512242ba3..8f1ba82fa 100644
+--- a/Trio/Sources/APS/Storage/DeterminationStorage.swift
++++ b/Trio/Sources/APS/Storage/DeterminationStorage.swift
+@@ -14,6 +14,10 @@ protocol DeterminationStorage {
+     func getOrefDeterminationNotYetUploadedToNightscout(_ determinationIds: [NSManagedObjectID]) async -> Determination?
+     func fetchForecastHierarchy(for determinationID: NSManagedObjectID, in context: NSManagedObjectContext)
+     async throws -> [(id: UUID, forecastID: NSManagedObjectID, forecastValueIDs: [NSManagedObjectID])]
++    func fetchIOBProjectionHierarchy(for determinationID: NSManagedObjectID, in context: NSManagedObjectContext)
++    async throws -> [(id: UUID, iobProjectionID: NSManagedObjectID, iobProjectionValueIDs: [NSManagedObjectID])]
++    func fetchCOBProjectionHierarchy(for determinationID: NSManagedObjectID, in context: NSManagedObjectContext)
++    async throws -> [(id: UUID, cobProjectionID: NSManagedObjectID, cobProjectionValueIDs: [NSManagedObjectID])]
+ }
+ 
+ final class BaseDeterminationStorage: DeterminationStorage, Injectable {
+@@ -232,4 +236,60 @@ final class BaseDeterminationStorage: DeterminationStorage, Injectable {
+             }
+         }
+     }
++
++    func fetchIOBProjectionHierarchy(for determinationID: NSManagedObjectID, in context: NSManagedObjectContext)
++    async throws -> [(id: UUID, iobProjectionID: NSManagedObjectID, iobProjectionValueIDs: [NSManagedObjectID])]
++    {
++        let results = try await CoreDataStack.shared.fetchEntitiesAsync(
++            ofType: IOBProjection.self,
++            onContext: context,
++            predicate: NSPredicate(format: "orefDetermination = %@", determinationID),
++            key: "date",
++            ascending: true,
++            relationshipKeyPathsForPrefetching: ["iobProjectionValues"]
++        )
++
++        // Process results entirely within a single context.perform block to avoid data races
++        return await context.perform {
++            guard let iobProjections = results as? [IOBProjection] else { return [] }
++
++            // Create and return the result array entirely within this block
++            return iobProjections.map { iobProjection in
++                let sortedValues = (iobProjection.iobProjectionValues ?? []).sorted { $0.index < $1.index }
++                return (
++                    id: UUID(),
++                    iobProjectionID: iobProjection.objectID,
++                    iobProjectionValueIDs: sortedValues.map(\.objectID)
++                )
++            }
++        }
++    }
++
++    func fetchCOBProjectionHierarchy(for determinationID: NSManagedObjectID, in context: NSManagedObjectContext)
++    async throws -> [(id: UUID, cobProjectionID: NSManagedObjectID, cobProjectionValueIDs: [NSManagedObjectID])]
++    {
++        let results = try await CoreDataStack.shared.fetchEntitiesAsync(
++            ofType: COBProjection.self,
++            onContext: context,
++            predicate: NSPredicate(format: "orefDetermination = %@", determinationID),
++            key: "date",
++            ascending: true,
++            relationshipKeyPathsForPrefetching: ["cobProjectionValues"]
++        )
++
++        // Process results entirely within a single context.perform block to avoid data races
++        return await context.perform {
++            guard let cobProjections = results as? [COBProjection] else { return [] }
++
++            // Create and return the result array entirely within this block
++            return cobProjections.map { cobProjection in
++                let sortedValues = (cobProjection.cobProjectionValues ?? []).sorted { $0.index < $1.index }
++                return (
++                    id: UUID(),
++                    cobProjectionID: cobProjection.objectID,
++                    cobProjectionValueIDs: sortedValues.map(\.objectID)
++                )
++            }
++        }
++    }
+ }
+diff --git a/Trio/Sources/Models/Determination.swift b/Trio/Sources/Models/Determination.swift
+index aaa94d3bd..47ade879e 100644
+--- a/Trio/Sources/Models/Determination.swift
++++ b/Trio/Sources/Models/Determination.swift
+@@ -34,6 +34,9 @@ struct Determination: JSON, Equatable {
+     var threshold: Decimal?
+     let carbRatio: Decimal?
+     let received: Bool?
++    var iobProjection: [Decimal]?
++    var latestCarbDate: Date?
++    var maxMealAbsorptionTime: Decimal?
+ }
+ 
+ struct Predictions: JSON, Equatable {
+diff --git a/Trio/Sources/Modules/Home/HomeStateModel+Setup/DeterminationSetup.swift b/Trio/Sources/Modules/Home/HomeStateModel+Setup/DeterminationSetup.swift
+index af0d335f1..1edf66400 100644
+--- a/Trio/Sources/Modules/Home/HomeStateModel+Setup/DeterminationSetup.swift
++++ b/Trio/Sources/Modules/Home/HomeStateModel+Setup/DeterminationSetup.swift
+@@ -18,6 +18,8 @@ extension Home.StateModel {
+                 try await updateDeterminationsArray(with: enactedAndNonEnactedIds, keyPath: \.enactedAndNonEnactedDeterminations)
+ 
+                 await updateForecastData()
++                await updateIOBProjectionData()
++                await updateCOBProjectionData()
+             } catch let error as CoreDataError {
+                 debug(.default, "Core Data error in setupDeterminationsArray: \(error)")
+             } catch {
+diff --git a/Trio/Sources/Modules/Home/HomeStateModel+Setup/ForecastSetup.swift b/Trio/Sources/Modules/Home/HomeStateModel+Setup/ForecastSetup.swift
+index 86bb4cd7f..0f2efb767 100644
+--- a/Trio/Sources/Modules/Home/HomeStateModel+Setup/ForecastSetup.swift
++++ b/Trio/Sources/Modules/Home/HomeStateModel+Setup/ForecastSetup.swift
+@@ -86,4 +86,92 @@ extension Home.StateModel {
+         minForecast = minResult
+         maxForecast = maxResult
+     }
++
++    func preprocessIOBProjectionData() async -> [(
++        id: UUID, iobProjectionID: NSManagedObjectID, iobProjectionValueIDs: [NSManagedObjectID]
++    )] {
++        do {
++            guard let determination = await viewContext.perform({
++                self.enactedAndNonEnactedDeterminations.first
++            }) else {
++                debug(.default, "No determination found for IOB projection preprocessing")
++                return []
++            }
++
++            return try await determinationStorage.fetchIOBProjectionHierarchy(
++                for: determination.objectID,
++                in: taskContext
++            )
++        } catch {
++            debug(
++                .default,
++                "\(DebuggingIdentifiers.failed) Failed to preprocess IOB projection data: \(error)"
++            )
++            return []
++        }
++    }
++
++    @MainActor func updateIOBProjectionData() async {
++        let iobProjectionDataIDs = await preprocessIOBProjectionData()
++
++        var iobProjectionData = [(id: UUID, iobProjection: IOBProjection, iobProjectionValue: IOBProjectionValue)]()
++
++        for data in iobProjectionDataIDs {
++            if let iobProjection = try? viewContext.existingObject(with: data.iobProjectionID) as? IOBProjection {
++                let values = data.iobProjectionValueIDs.compactMap {
++                    try? viewContext.existingObject(with: $0) as? IOBProjectionValue
++                }
++
++                iobProjectionData.append(contentsOf: values.map {
++                    (id: data.id, iobProjection: iobProjection, iobProjectionValue: $0)
++                })
++            }
++        }
++
++        self.iobProjectionData = iobProjectionData
++    }
++
++    func preprocessCOBProjectionData() async -> [(
++        id: UUID, cobProjectionID: NSManagedObjectID, cobProjectionValueIDs: [NSManagedObjectID]
++    )] {
++        do {
++            guard let determination = await viewContext.perform({
++                self.enactedAndNonEnactedDeterminations.first
++            }) else {
++                debug(.default, "No determination found for COB projection preprocessing")
++                return []
++            }
++
++            return try await determinationStorage.fetchCOBProjectionHierarchy(
++                for: determination.objectID,
++                in: taskContext
++            )
++        } catch {
++            debug(
++                .default,
++                "\(DebuggingIdentifiers.failed) Failed to preprocess COB projection data: \(error)"
++            )
++            return []
++        }
++    }
++
++    @MainActor func updateCOBProjectionData() async {
++        let cobProjectionDataIDs = await preprocessCOBProjectionData()
++
++        var cobProjectionData = [(id: UUID, cobProjection: COBProjection, cobProjectionValue: COBProjectionValue)]()
++
++        for data in cobProjectionDataIDs {
++            if let cobProjection = try? viewContext.existingObject(with: data.cobProjectionID) as? COBProjection {
++                let values = data.cobProjectionValueIDs.compactMap {
++                    try? viewContext.existingObject(with: $0) as? COBProjectionValue
++                }
++
++                cobProjectionData.append(contentsOf: values.map {
++                    (id: data.id, cobProjection: cobProjection, cobProjectionValue: $0)
++                })
++            }
++        }
++
++        self.cobProjectionData = cobProjectionData
++    }
+ }
+diff --git a/Trio/Sources/Modules/Home/HomeStateModel.swift b/Trio/Sources/Modules/Home/HomeStateModel.swift
+index 70c0999fa..bc73eb599 100644
+--- a/Trio/Sources/Modules/Home/HomeStateModel.swift
++++ b/Trio/Sources/Modules/Home/HomeStateModel.swift
+@@ -104,6 +104,8 @@ extension Home {
+         var tempTargetRunStored: [TempTargetRunStored] = []
+         var isOverrideCancelled: Bool = false
+         var preprocessedData: [(id: UUID, forecast: Forecast, forecastValue: ForecastValue)] = []
++        var iobProjectionData: [(id: UUID, iobProjection: IOBProjection, iobProjectionValue: IOBProjectionValue)] = []
++        var cobProjectionData: [(id: UUID, cobProjection: COBProjection, cobProjectionValue: COBProjectionValue)] = []
+         var pumpStatusHighlightMessage: String?
+         var pumpStatusBadgeImage: UIImage?
+         var pumpStatusBadgeColor: Color?
+diff --git a/Trio/Sources/Modules/Home/View/Chart/ChartElements/SelectionPopoverView.swift b/Trio/Sources/Modules/Home/View/Chart/ChartElements/SelectionPopoverView.swift
+index 391504587..98fd7280c 100644
+--- a/Trio/Sources/Modules/Home/View/Chart/ChartElements/SelectionPopoverView.swift
++++ b/Trio/Sources/Modules/Home/View/Chart/ChartElements/SelectionPopoverView.swift
+@@ -3,7 +3,8 @@ import Foundation
+ import SwiftUI
+ 
+ struct SelectionPopoverView: ChartContent {
+-    let selectedGlucose: GlucoseStored
++    let selectedGlucose: GlucoseStored?
++    let selection: Date
+     let selectedIOBValue: OrefDetermination?
+     let selectedCOBValue: OrefDetermination?
+     let units: GlucoseUnits
+@@ -12,12 +13,17 @@ struct SelectionPopoverView: ChartContent {
+     let currentGlucoseTarget: Decimal
+     let glucoseColorScheme: GlucoseColorScheme
+     let isSmoothingEnabled: Bool
++    let predictedIOB: Decimal?
++    let predictedCOB: Decimal?
++    let predictedGlucose: Decimal?
+ 
+-    private var glucoseToDisplay: Decimal {
+-        units == .mgdL ? Decimal(selectedGlucose.glucose) : Decimal(selectedGlucose.glucose).asMmolL
++    private var glucoseToDisplay: Decimal? {
++        guard let selectedGlucose else { return nil }
++        return units == .mgdL ? Decimal(selectedGlucose.glucose) : Decimal(selectedGlucose.glucose).asMmolL
+     }
+ 
+-    private var pointMarkColor: Color {
++    private var pointMarkColor: Color? {
++        guard let selectedGlucose else { return nil }
+         let hardCodedLow = Decimal(55)
+         let hardCodedHigh = Decimal(220)
+         let isDynamicColorScheme = glucoseColorScheme == .dynamicColor
+@@ -32,7 +38,7 @@ struct SelectionPopoverView: ChartContent {
+     }
+ 
+     var body: some ChartContent {
+-        RuleMark(x: .value("Selection", selectedGlucose.date ?? Date.now, unit: .minute))
++        RuleMark(x: .value("Selection", selection, unit: .minute))
+             .foregroundStyle(Color.tabBar)
+             .offset(yStart: isSmoothingEnabled ? 90 : 70)
+             .lineStyle(.init(lineWidth: 2))
+@@ -44,46 +50,61 @@ struct SelectionPopoverView: ChartContent {
+                 selectionPopover
+             }
+ 
+-        PointMark(
+-            x: .value("Time", selectedGlucose.date ?? Date.now, unit: .minute),
+-            y: .value("Value", glucoseToDisplay)
+-        )
+-        .zIndex(-1)
+-        .symbolSize(CGSize(width: 15, height: 15))
+-        .foregroundStyle(pointMarkColor)
++        if let selectedGlucose, let glucoseToDisplay, let pointMarkColor {
++            PointMark(
++                x: .value("Time", selectedGlucose.date ?? selection, unit: .minute),
++                y: .value("Value", glucoseToDisplay)
++            )
++            .zIndex(-1)
++            .symbolSize(CGSize(width: 15, height: 15))
++            .foregroundStyle(pointMarkColor)
+ 
+-        PointMark(
+-            x: .value("Time", selectedGlucose.date ?? Date.now, unit: .minute),
+-            y: .value("Value", glucoseToDisplay)
+-        )
+-        .zIndex(-1)
+-        .symbolSize(CGSize(width: 6, height: 6))
+-        .foregroundStyle(Color.primary)
++            PointMark(
++                x: .value("Time", selectedGlucose.date ?? selection, unit: .minute),
++                y: .value("Value", glucoseToDisplay)
++            )
++            .zIndex(-1)
++            .symbolSize(CGSize(width: 6, height: 6))
++            .foregroundStyle(Color.primary)
++        }
+     }
+ 
+     @ViewBuilder var selectionPopover: some View {
+         VStack(alignment: .leading) {
+             HStack {
+                 Image(systemName: "clock")
+-                Text(selectedGlucose.date?.formatted(.dateTime.hour().minute(.twoDigits)) ?? "")
++                Text(selection.formatted(.dateTime.hour().minute(.twoDigits)))
+                     .font(.body).bold()
+             }
+             .font(.body).padding(.bottom, 2)
+ 
+-            HStack {
+-                Text("CGM: ") + Text(glucoseToDisplay.description).bold() + Text(" \(units.rawValue)")
+-            }
+-            .foregroundStyle(pointMarkColor)
+-            .font(.body)
++            if let selectedGlucose, let glucoseToDisplay, let pointMarkColor {
++                HStack {
++                    Text("CGM: ") + Text(glucoseToDisplay.description).bold() + Text(" \(units.rawValue)")
++                }
++                .foregroundStyle(pointMarkColor)
++                .font(.body)
+ 
+-            if isSmoothingEnabled, let smoothedGlucose = selectedGlucose.smoothedGlucose {
+-                var smoothedGlucoseToDisplay: Decimal {
+-                    units == .mgdL ? smoothedGlucose.decimalValue : smoothedGlucose.decimalValue.asMmolL
++                if isSmoothingEnabled, let smoothedGlucose = selectedGlucose.smoothedGlucose {
++                    var smoothedGlucoseToDisplay: Decimal {
++                        units == .mgdL ? smoothedGlucose.decimalValue : smoothedGlucose.decimalValue.asMmolL
++                    }
++                    HStack {
++                        Image(systemName: "sparkles")
++                        Text(smoothedGlucoseToDisplay.description) + Text(" \(units.rawValue)")
++                    }.font(.body)
+                 }
++            } else if let predictedGlucose {
+                 HStack {
+-                    Image(systemName: "sparkles")
+-                    Text(smoothedGlucoseToDisplay.description) + Text(" \(units.rawValue)")
+-                }.font(.body)
++                    Image(systemName: "chart.line.uptrend.xyaxis").frame(width: 15)
++                    Text(units == .mgdL ? predictedGlucose.description : predictedGlucose.formattedAsMmolL)
++                        .bold()
++                    Text(units == .mgdL ? " mg/dL" : " mmol/L")
++                        .foregroundStyle(.secondary)
++                }
++                .foregroundStyle(pointMarkColor ?? Color.primary)
++                .font(.body)
++                .opacity(0.6)
+             }
+ 
+             if let selectedIOBValue, let iob = selectedIOBValue.iob {
+@@ -105,6 +126,28 @@ struct SelectionPopoverView: ChartContent {
+                 }
+                 .foregroundStyle(Color.orange).font(.body)
+             }
++
++            if let predictedIOB {
++                HStack {
++                    Image(systemName: "syringe.fill").frame(width: 15)
++                    Text(Formatter.decimalFormatterWithTwoFractionDigits.string(from: NSDecimalNumber(decimal: predictedIOB)) ?? "")
++                        .bold()
++                        + Text(String(localized: " U", comment: "Insulin unit"))
++                }
++                .foregroundStyle(Color.insulin).font(.body)
++                .opacity(0.6)
++            }
++
++            if let predictedCOB {
++                HStack {
++                    Image(systemName: "fork.knife").frame(width: 15)
++                    Text(Formatter.integerFormatter.string(from: NSDecimalNumber(decimal: predictedCOB)) ?? "")
++                        .bold()
++                        + Text(String(localized: " g", comment: "gram of carbs"))
++                }
++                .foregroundStyle(Color.orange).font(.body)
++                .opacity(0.6)
++            }
+         }
+         .padding(.horizontal)
+         .padding(.vertical, 2)
+diff --git a/Trio/Sources/Modules/Home/View/Chart/MainChartView.swift b/Trio/Sources/Modules/Home/View/Chart/MainChartView.swift
+index eb1ede743..bb50c2962 100644
+--- a/Trio/Sources/Modules/Home/View/Chart/MainChartView.swift
++++ b/Trio/Sources/Modules/Home/View/Chart/MainChartView.swift
+@@ -61,6 +61,44 @@ struct MainChartView: View {
+         return findDetermination(in: range)
+     }
+ 
++    private func timeForForecastIndex(_ index: Int32) -> Date {
++        let anchor = state.determinationsFromPersistence.first?.deliverAt ?? .distantPast
++        return anchor.addingTimeInterval(TimeInterval(index * 300))
++    }
++
++    var predictedIOBValue: Decimal? {
++        guard let selection else { return nil }
++        let tolerance: TimeInterval = 150
++        let match = state.iobProjectionData.first {
++            abs(timeForForecastIndex($0.iobProjectionValue.index).timeIntervalSince(selection)) <= tolerance
++        }
++        guard let match else { return nil }
++        return match.iobProjectionValue.value?.decimalValue
++    }
++
++    var predictedCOBValue: Decimal? {
++        guard let selection else { return nil }
++        let tolerance: TimeInterval = 150
++        let match = state.cobProjectionData.first {
++            abs(timeForForecastIndex($0.cobProjectionValue.index).timeIntervalSince(selection)) <= tolerance
++        }
++        guard let match else { return nil }
++        return match.cobProjectionValue.value?.decimalValue
++    }
++
++    var predictedGlucoseValue: Decimal? {
++        guard let selection else { return nil }
++        let tolerance: TimeInterval = 150
++        let indices = 0 ..< min(state.minForecast.count, state.maxForecast.count)
++        guard let matchIndex = indices.first(where: {
++            abs(timeForForecastIndex(Int32($0)).timeIntervalSince(selection)) <= tolerance
++        }) else { return nil }
++        let minValue = Decimal(state.minForecast[matchIndex])
++        let maxValue = Decimal(state.maxForecast[matchIndex])
++        let midpoint = (minValue + maxValue) / 2
++        return units == .mmolL ? midpoint.asMmolL : midpoint
++    }
++
+     var body: some View {
+         VStack {
+             ZStack {
+@@ -174,9 +212,10 @@ extension MainChartView {
+                 )
+ 
+                 /// show glucose value when hovering over it
+-                if let selectedGlucose {
++                if let selection {
+                     SelectionPopoverView(
+                         selectedGlucose: selectedGlucose,
++                        selection: selection,
+                         selectedIOBValue: selectedIOBValue,
+                         selectedCOBValue: selectedCOBValue,
+                         units: units,
+@@ -184,7 +223,10 @@ extension MainChartView {
+                         lowGlucose: lowGlucose,
+                         currentGlucoseTarget: currentGlucoseTarget,
+                         glucoseColorScheme: glucoseColorScheme,
+-                        isSmoothingEnabled: state.settingsManager.settings.smoothGlucose
++                        isSmoothingEnabled: state.settingsManager.settings.smoothGlucose,
++                        predictedIOB: predictedIOBValue,
++                        predictedCOB: predictedCOBValue,
++                        predictedGlucose: predictedGlucoseValue
+                     )
+                 }
+             }

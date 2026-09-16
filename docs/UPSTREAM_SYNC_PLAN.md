@@ -1,0 +1,639 @@
+# Upstream Sync Plan — ek30gold/Trio → nightscout/Trio
+
+Status: **v1.0 released upstream — Phase 0 base decision resolved, re-scoping Phase 2**
+Last updated: 2026-09-15
+
+---
+
+## 0. v1.0 released today (2026-09-15) — read this first
+
+`nightscout/Trio` cut **v1.0** to `main` today (`46b559dcd`, merge of
+`release/v1.0`). Upstream `dev` is only 2 commits ahead of it (a version bump).
+This is the release Phase 0 said to wait for — the wait is over. Base decision:
+**port onto `v1.0`**, not `dev`.
+
+**Act on these two immediately, independent of anything else in this doc:**
+
+1. **`SCHEDULED_SYNC` is confirmed still ON** (never got turned off since first
+   flagged 2026-08-08). Verified two ways: `build_trio.yml`'s "Sync upstream
+   changes" step actually *ran* (not skipped) on the last scheduled run
+   (2026-09-13, run `34756606726`) — it just found nothing new, because
+   upstream's `main` hadn't moved past v0.8.4 yet. It has now. **The next Sunday
+   cron is the first one with something real to sync — v1.0 — into this fork's
+   `main`, unattended, against the 40 files listed in §3 below.** Turn off
+   `SCHEDULED_SYNC` in repo Settings → Secrets and variables → Actions →
+   Variables before that fires.
+2. **The Time Sensitive Notifications entitlement blocker (§ Phase 1 TestFlight
+   attempt, below) is still unresolved and confirmed present in v1.0 itself** —
+   this isn't a `dev`-only thing that might have gone away. Any real port onto
+   v1.0 hits the same Apple Developer Portal wall.
+
+**Two more active branches surfaced that weren't visible in the last review**
+(found via `git branch -a`, not by request — worth knowing about):
+
+- `claude/modern-design-pills-graphs-93qb0r` — continues
+  `feature/modern-home-layout` with an additional commit, "Size Modern layout
+  charts to match Classic." Same §7 decision applies to it.
+- `claude/scheduled-overrides-bug-ilajxp` — **touches dosing-adjacent code**
+  ("activate scheduled overrides and temp targets outside the view layer",
+  "nine QA findings across dosing and remote paths"). Out of scope for this
+  review; flagging its existence only. Per CLAUDE.md, dosing-adjacent work needs
+  direct human review before merge — not something to wave through on the
+  strength of a branch name.
+
+---
+
+## 1. Where we actually are
+
+The fork branched from the **v0.8.4 stable release** of `nightscout/Trio`
+(commit `29350e31`), *not* from the `dev` branch.
+
+| | `APP_VERSION` | `APP_DEV_VERSION` |
+|---|---|---|
+| `ek30gold/Trio` (this fork) | 0.8.4 | 0.8.4 |
+| `nightscout/Trio` @ v0.8.4 release | 0.8.4 | 0.8.4 |
+| `nightscout/Trio` @ `dev` HEAD | 0.8.4 | 0.8.4.47 |
+
+The `(40)` build number shown in TestFlight is this fork's own CI counter. It is
+**not** upstream dev build 40. The in-app version checker line
+"Latest dev: 0.8.4.47 ↑" is comparing against a *different release track*.
+
+**Real gap: ~920 commits, 440 files changed upstream.**
+This fork carries 11 merge commits (8 shipped features) touching 51 files, of
+which **28 collide** with files upstream also changed.
+
+### Reference commits
+
+| Ref | Commit | Meaning |
+|---|---|---|
+| Fork base | `29350e31` | upstream v0.8.4 release — the merge-base |
+| Fork `main` | `c68f659` | after PR #8 |
+| Upstream `dev` | `469562376` | `0.8.4.47` at time of writing |
+
+---
+
+## 2. What upstream changed
+
+Five changes are structural, not incremental.
+
+**1. oref: JavaScript → native Swift.** PRs #1141, #1273, #1317, #1316 ported the
+OpenAPS algorithm to Swift and then *deleted* the JS engine. New
+`Trio/Sources/APS/OpenAPSSwift/` tree: `DosingEngine.swift` (917 lines),
+`DetermineBasalGenerator.swift` (737), `IobHistory.swift` (485),
+`ForecastGenerator.swift` (433), `AutosensGenerator.swift` (433), `MealCob.swift`,
+`ProfileGenerator.swift`. `OpenAPS.swift` went 1010 → 808 lines with a changed
+function surface.
+
+**2. Home screen refactor** (#1373, plus #1326–#1332). `HomeRootView.swift` gutted
+and split into `+BottomControls` (758 lines), `+Header`, `+MealPanel`, `+Refresh`;
+new `GlassChrome.swift` (liquid glass), `HomeLayout.swift`,
+`MultiUsePanelState.swift`, `HomeStatsPanelFace.swift`, sensor-lifecycle arc.
+`MainChartView.swift`: 1040 lines churned.
+
+**3. Alerting / notifications rework** (#1203, #1269, #1307). New
+`Services/Alerts/`: `TrioAlertManager` (579), `GlucoseAlertCoordinator` (484),
+`TrioModalAlertScheduler` (449), `AlertCatalogRegistry` (259).
+`UserNotificationsManager.swift` churned 598 lines. `MainStateModel.swift` −307.
+
+**4. APSManager refactor** parts 1–3 (#1225–#1227), 631 lines churned, plus Core
+Data fixes (#1107).
+
+**5. New device support.** AccuChekKit and EversenseKit added as **new git
+submodules**; Medtrum / OmnipodKit / G7SensorKit bumped; Omnipod BLE heartbeat
+wired to the CGM read schedule; Garmin complication; watch forecast; quick bolus;
+Live Activity prediction.
+
+---
+
+## 3. Collision analysis
+
+### 🔴 Structural — the code we patched no longer exists
+
+| File | Upstream churn | Ours | Why it's hard |
+|---|---|---|---|
+| `APS/OpenAPS/OpenAPS.swift` | 714 | 69 | Our `fetchAndProcessCarbs() -> (String, Date?)` change targets a function **upstream deleted**. Carbs now come from `carbsStorage.getCarbsForAlgorithm(...)` returning typed `[CarbsEntry]` / `ComputedCarbs`, not RawJSON. `processDetermination` now takes an explicit `context:` param. |
+| `Home/View/Chart/MainChartView.swift` | 1040 | 47 | Rewritten around the new home layout. |
+| `Treatments/TreatmentsStateModel.swift` | 439 | 85 | Heavy churn under our bolus-pill IOB/COB work. |
+| `Services/UserNotifications/UserNotificationsManager.swift` | 598 | 28 | Superseded by the new `Services/Alerts/` stack. |
+| `Home/HomeStateModel.swift` | 706 | 3 | Our 3 lines are trivial to re-add; the file around them is unrecognizable. |
+
+### 🟡 Semantic — merges cleanly but may be *wrong*
+
+Git will not flag these. Each needs eyes on the merged result, not just a
+conflict-free status.
+
+- `HomeStateModel+Setup/ForecastSetup.swift` — ours +88, upstream 21. Forecast
+  generation moved into `OpenAPSSwift/Forecasts/`.
+- `Home/View/Chart/ChartElements/SelectionPopoverView.swift` — 73 up / 105 ours.
+- `APS/Storage/DeterminationStorage.swift` — 59 up / 60 ours.
+- `APS/Storage/OverrideStorage.swift` — 47 up / 49 ours.
+- `Home/View/Chart/ChartElements/CobIobChart.swift` — 109 up / 59 ours.
+
+### 🟢 Mechanical
+
+`Screen.swift`, `WatchMessageKeys.swift`, `Determination.swift`, both
+`WatchState.swift`, `FeatureSettingsView.swift`, `SettingItems.swift`,
+`TempTargetsStorage.swift`.
+
+**CoreData model:** upstream changed *only* the `lastSavedToolsVersion` attribute
+on the root `<model>` element. Our four new projection entities
+(`IOBProjection`, `IOBProjectionValue`, `COBProjection`, `COBProjectionValue`)
+plus the `MealPresetStored.note` / `.orderPosition` attributes drop in clean.
+
+**`Trio.xcodeproj/project.pbxproj`** (1334 up / 36 ours): mechanical. Resolve by
+taking upstream wholesale, then re-registering our files per the four-section
+procedure in `CLAUDE.md`.
+
+### Two findings that change plans
+
+**PR #8 (swipe on Adjustments) partly duplicates upstream #1315.** Upstream
+independently fixed the shared delete-confirmation state — but via a
+`confirmationDialog` **view modifier**, not our split into
+`isConfirmOverrideDeletePresented` / `isConfirmTempTargetDeletePresented`.
+Upstream also kept `.tag(index)` where we moved to `.tag(item)`, and still uses
+`switch state.selectedTab` with one subtree live. Our "both tabs render
+simultaneously" transformations (`defaultText` / `currentActiveAdjustment` as
+functions taking an explicit tab) must be redone against their code.
+
+**`feature/modern-home-layout` — the hook point survives, but reconsider the
+feature.** `mainViewElements(_ geo: GeometryProxy) -> some View` still exists
+upstream with an identical signature. Upstream turned it into a chrome wrapper
+(ScrollView + pull-to-force-loop + `bottomControls()`) and moved the layout into a
+new `dashboardContent(_ geo:)`, whose body is nearly line-for-line our
+`classicViewElements`. **So our switch moves down one level, into
+`dashboardContent`.** No symbol collisions (`ModernCard` / `ModernChip` /
+`HomeLayoutStyle` vs upstream `HomeLayout` / `GlassChrome` / `HomeStatsPanelFace`).
+
+Caveats: upstream is already doing its own home modernization (liquid glass,
+sensor arc, multi-use panel, stats faces, `modernTabBar()`) — evaluate whether
+ours is still worth 850 lines. And `DummyCharts.swift`, which our branch modifies,
+**was deleted upstream** → delete/modify conflict.
+
+**`claude/trio-basal-rate-widget-2ikgez` has 8 collisions, not 1** (upstream's
+Live Activity prediction PR #1194 touched the same stack). Upstream's LiveActivity
+churn is only +225/−24 and mostly additive, so this stays tractable.
+
+---
+
+## 3a. Verification without a Mac
+
+There is no Mac in this workflow — builds are done via GitHub Actions ("browser
+build") and delivered through TestFlight. Everything below is therefore designed
+around CI as the compile/test surface.
+
+**What already works:** `build_trio.yml` runs on `workflow_dispatch` against
+whatever branch it is dispatched on (`TARGET_BRANCH: ${{ github.ref_name }}`), and
+has been used successfully on at least 8 feature branches. That is the path to a
+real on-device build of any branch.
+
+**What was broken:** `unit_tests.yml` is hard-gated with
+`if: github.repository_owner == 'nightscout'` and only triggers on a `dev` branch
+this fork does not have. It has therefore **never run here** — the fork had no
+automated compile or test gate at all.
+
+**Fix:** `.github/workflows/fork_ci.yml` (fork-owned, new file — deliberately not
+a patch to `unit_tests.yml`, so it never conflicts during the upstream re-port).
+Runs `build-for-testing` + `test-without-building` on `main`, `claude/**`,
+`feature/**`, `fix/**`, `refactor/**`, `spike/**`, on PRs into `main`, and on
+manual dispatch. This is the substitute for "build it locally in Xcode".
+
+**Revised gate model for every phase below:**
+
+| Old (Mac) | New (no Mac) |
+|---|---|
+| `xcodebuild` locally | Fork CI green on the branch |
+| Run in simulator | — (not available; rely on tests) |
+| Run on device | `build_trio.yml` dispatch → TestFlight install |
+
+Practical consequence: **CI green is cheap, a device build is expensive** (~30–60
+min of macOS runner + a TestFlight round trip). So each re-ported feature should
+be pushed until Fork CI is green *first*, and only then spent on a TestFlight
+build. Batch device verification where features are independent.
+
+### ⚠️ Scheduled sync — decide-by-default hazard
+
+`build_trio.yml` contains a **"Sync upstream changes"** step
+(`aormsby/Fork-Sync-With-Upstream-action`) that syncs `TARGET_BRANCH` from
+`nightscout/Trio` of the *same branch name*, whenever `vars.SCHEDULED_SYNC` is not
+`'false'`. Its weekly `cron` fires on the default branch — `main`.
+
+This is live, not theoretical: scheduled runs on `main` completed on 2026-07-12,
+07-19, 07-26 and 08-02, and this fork's history already contains three
+`Merge branch 'main' of https://github.com/nightscout/Trio` commits from it. That
+auto-sync is *why* this fork tracks the release track.
+
+**Implication:** when upstream cuts a release to `main`, the next Sunday cron will
+try to merge it into this fork's `main` unattended — and if the merge succeeds,
+build it straight to TestFlight. Against the colliding files, the likely outcome
+is a failed merge (loud, safe); the dangerous outcome is a clean-but-semantically-
+wrong auto-merge that ships to the phone.
+
+**Action (repo settings, cannot be done from code):**
+Settings → Secrets and variables → Actions → Variables →
+set `SCHEDULED_SYNC = false` (and optionally `SCHEDULED_BUILD = false`).
+Manual `workflow_dispatch` builds are unaffected.
+
+**Update 2026-09-15: this was never done, and it stopped being theoretical
+today.** Upstream released **v1.0** to `main` (see §0). Confirmed via the
+2026-09-13 scheduled run (`34756606726`) that the "Sync upstream changes" step
+still *executes* — it just had nothing to sync because upstream's `main` hadn't
+moved since v0.8.4. It has now. The next Sunday cron is the first one with a
+real payload. Turn this off before then.
+
+---
+
+## 3b. v1.0 review (2026-09-15) — what changed since the August snapshot
+
+The last full review (§2–§3) was built from upstream `dev` at `0.8.4.47`
+(2026-08-08). Between then and today's v1.0 release, **65 more PRs merged to
+`dev`** (versions `0.8.4.48` through `0.8.4.112`, then the `1.0` cut). Full
+upstream gap from this fork's v0.8.4 base is now **662 files** (up from 440),
+and the fork's own footprint against that base is **60 files** (up from 51 —
+PR #9's Live Activity basal-rate widget merged to `main` in the interim).
+**Collisions: 40 files, up from 28.** Same file list as §3 plus the
+LiveActivity/watch files PR #9 added, minus none.
+
+### What we gain — upstream absorbed our hardest planned feature
+
+**COB/IOB projection (fork's planned PR #4, previously flagged 🔴, "do last,
+highest risk") is now fully redundant.** Upstream shipped their own in two
+steps: IOB projection landed on `dev` sometime before our August snapshot (we
+had the file churn on our radar but didn't identify the feature by name at the
+time — a miss in the original review); COB projection completed it on
+2026-08-11, PR #1394 `feat/cob-projection`
+(`b820d57ac`, "Plot Projected COB Decay in Home View Chart").
+
+Read the actual diff: it's architecturally cleaner than the fork's plan.
+Upstream computes both curves live from the native Swift oref forecast
+pipeline (`OpenAPSSwift/Forecasts/ForecastGenerator*`) into a generic
+`ProjectionPoint` struct with a shared `bridged(...)` helper — no persistence.
+The fork's plan was to add four new CoreData entities (`IOBProjection`,
+`IOBProjectionValue`, `COBProjection`, `COBProjectionValue`) and hand-roll the
+carb-window math in a patched `OpenAPS.swift`. **Recommendation: drop the
+fork's custom implementation from the re-port plan entirely; adopt upstream's
+native version as-is.** This removes the single riskiest, most labor-intensive
+item from Phase 2 (§6) outright — no re-port needed, just don't reintroduce it.
+
+### What we lose — a collision got worse, not better
+
+**`SelectionPopoverView.swift` — the file the fork's predicted-forecast-tooltip
+feature (PR #3) is built on — is deleted in v1.0.** PR #1455
+`feat/chart-selection-popover` (merged 2026-09-14, the day before release)
+removed it entirely (−112 lines, the whole file) and replaced it with a new
+`ChartSelectionRow.swift` (+211 lines), with supporting logic moved into
+`HomeRootView+MealPanel.swift` and `MainChartView.swift`. Checked whether this
+is another "upstream did it for us" case like COB/IOB projection — it is not:
+`ChartSelectionRow.swift` contains no prediction/forecast logic at all, it's a
+pure UI restructure of the selection popover into a row-based layout. **The
+fork's tooltip feature is still additive and still worth re-porting, but it
+now has to be rebuilt against a component that didn't exist at the last
+review, not patched onto the old one.** Moves this item from 🟠 to closer to
+🔴 in the §6 risk table.
+
+### Other upstream gains worth knowing about (not deeply reviewed)
+
+- **PR #1511 `feat/dosing-modes`** (merged day of release): Low-Glucose-Suspend
+  and Basal Testing modes, enhanced Open Loop mode. Real safety/feature value,
+  `APSManager.swift` +112 lines. No fork collision.
+- **PR #1518 `feat/home-stats-panel-faces`**, **#1493 `feat/gesture-legend`** —
+  continued home-refactor maturation, same territory as the Modern-layout
+  discussion in §7.
+- **PR #1366 `feat/accessibility-improvements`**, **#1439
+  `feat/device-picker`**, **#1397 `feat/release-notes`** (new
+  `scripts/capture-release-notes.sh`), plus numerous driver fixes (Enlite,
+  DanaKit, Eversense, Libre3, Omnipod) and watch features (contact bobble,
+  log-carbs-when-bolus-zero).
+- **PR #1367 `refactor/di-hygiene`** — touches the Assembly/DI registration
+  pattern this fork's features rely on (see CLAUDE.md's Assembly section).
+  Not reviewed in depth; check this specifically before registering any new
+  service during the re-port.
+
+### Confirmed still blocking, now more urgent
+
+The Time Sensitive Notifications entitlement gap (originally found blocking
+the `spike/upstream-base` TestFlight build, see the Phase 1 section below) is
+**present in v1.0 itself** — confirmed directly in
+`Trio.entitlements`. This is no longer a `dev`-branch-only problem to defer;
+it blocks a build of the actual release. Apple Developer Portal action item
+unchanged from before.
+
+---
+
+## 4. Phase 0 — Decide the base (deferred by design)
+
+**Resolved 2026-09-15: v1.0 released, port onto it, not `dev` (see §0).** The
+criteria table below is kept for the record of how the decision would have
+been made if the release hadn't landed first.
+
+**Decision is deliberately deferred.** Rather than picking a base up front, run
+Phase 1 and let the evidence choose. Re-evaluate once the Phase 1 gate is filled
+in — but note that deferring only stays safe once `SCHEDULED_SYNC` is off (above),
+otherwise the Sunday cron makes the decision unattended.
+
+### Decision criteria — pick based on what Phase 1 shows
+
+| Evidence from Phase 1 | Points to |
+|---|---|
+| Upstream `dev` CI green **and** stable on device for ~1 week | A — port onto `dev` now |
+| `dev` builds but shows dosing/loop oddities, or CI red | B — wait for v0.8.5 |
+| Upstream home refactor covers what Modern layout was for | Drop `feature/modern-home-layout`, shrinking the port |
+| Modern layout still clearly better for daily use | Keep it; budget the re-port against `dashboardContent` |
+| v0.8.5 released before the spike finishes | B, automatically — retarget spike at the release tag |
+
+### The options themselves
+
+Upstream has **no v0.8.5 release yet**; `main` is still v0.8.4.
+
+- **Option A — port onto `dev` now.** Gets oref-swift, home refactor, new drivers.
+  Cost: running *pre-release closed-loop dosing code*. The oref JS→Swift port is a
+  from-scratch reimplementation of the dosing algorithm.
+- **Option B — wait for v0.8.5, port onto the release tag.** Same work, done once,
+  against code that passed upstream release testing. **Recommended.**
+- **Option C — stay on v0.8.4.** Cheapest now, worst later.
+
+Prior recommendation was **B**. That now resolves through the criteria table
+above rather than being chosen up front — run Phase 1 first and let it decide.
+
+---
+
+## 5. Phase 1 — Baseline spike (throwaway, ~half a day)
+
+Do **not** merge anything. Establish ground truth.
+
+1. Add `upstream` remote. *(done — see §8)*
+2. Branch `spike/upstream-base` from `upstream/dev`; `git submodule update --init
+   --recursive` (picks up AccuChekKit + EversenseKit).
+3. **Build and run it clean, with none of our features.** Confirm upstream `dev`
+   works on the actual phone + pump + CGM.
+4. Run the test suite for a green baseline.
+5. Live with the stock home refactor for a few days.
+
+**Gate:** if upstream `dev` does not build and run clean, stop. Nothing
+downstream matters until it does.
+
+---
+
+## 6. Phase 2 — Re-port, feature by feature
+
+**Do not `git merge upstream/dev` into `main`.** With 920 commits, 28 collisions,
+and dosing-adjacent semantic conflicts that merge *silently*, a big-bang merge is
+the wrong tool for safety-critical code. Branch each feature fresh off the new
+base and re-apply it as a fresh implementation *informed by* the old diff.
+
+Order puts cheap wins first to validate the process before the hard ones.
+
+| # | Feature (orig PR) | Risk | Notes |
+|---|---|---|---|
+| 1 | Carb edit transient recompute (#6) | 🟢 | `HistoryStateModel+CarbEditing/+Carbs` — **zero collisions**. Pure re-apply. |
+| 2 | Favorite foods / meal presets (#2) | 🟢 | Mostly new files + 2 CoreData attributes. Only `Screen.swift` collides (21/3). |
+| 3 | Watch eventual BG (#5) | 🟡 | `AppleWatchManager` churned 125; check for duplication against upstream's watch-forecast PR #1306. |
+| 4 | Scheduled overrides (#1) | 🟡 | `OverrideStorage` 47/49, `OverrideSetup` 85/27. |
+| 5 | Swipe on Adjustments (#8) | 🟡 | Rebuild on upstream's modifier-based confirmation dialog. Keep the final `TabView` approach — do not re-derive the three failed gesture attempts. |
+| 6 | Predicted forecast tooltip (#3) | 🔴 | **Update 2026-09-15:** `SelectionPopoverView.swift` no longer exists in v1.0 (deleted by PR #1455, see §3b) — rebuild against the new `ChartSelectionRow.swift`, not a patch onto the old file. Upstream's replacement has no prediction logic of its own, so this is still worth doing, just harder than originally scoped. |
+| 7 | Bolus pills IOB/COB (#7) | 🟠 | `TreatmentsStateModel` churned 439. |
+| 8 | ~~COB/IOB projections (#4)~~ | — | **Dropped 2026-09-15.** Upstream shipped this natively (PR #1394, `feat/cob-projection`, see §3b) with a cleaner architecture — computed live from the forecast pipeline, no CoreData additions. Do not re-port; just don't reintroduce a competing implementation. |
+| 9 | Basal rate Live Activity widget (#9) | 🟡 | Merged to `main` since the original review (was Phase 3). 8 collisions, mostly additive on both sides (upstream's Live Activity prediction work, PR #1194 era). |
+
+**Per-feature discipline**
+
+- One branch per feature, off the new base. Never batch two.
+- Build + tests green before starting the next.
+- Register every new `.swift` in `project.pbxproj` per the four-section procedure
+  in `CLAUDE.md` — creating the file is not enough.
+- Run SwiftFormat before committing.
+
+---
+
+## 7. Phase 3 / Phase 4
+
+**Phase 3 — unmerged branches**
+
+Two more surfaced during the 2026-09-15 review that weren't visible in August
+(see §0): `claude/modern-design-pills-graphs-93qb0r` (continues the Modern
+layout work below) and `claude/scheduled-overrides-bug-ilajxp` (dosing-adjacent
+fix, out of scope for this doc — needs direct human review per CLAUDE.md before
+anything else happens to it).
+
+- `feature/modern-home-layout` — **decide, don't port reflexively.** After living
+  with upstream's refactor in Phase 1: (a) drop it if upstream's modernization
+  covers the intent; (b) re-port the switch into `dashboardContent(_ geo:)` and
+  rebuild `modernViewElements` against the new component set; (c) cherry-pick only
+  what upstream lacks. `DummyCharts.swift` is gone — whatever used it needs a new
+  home.
+
+  **They don't compete on the same axis — read this before assuming overlap.**
+  Compared the actual implementations, not just the diffstat:
+
+  - Upstream's `GlassChrome.swift` renders real iOS 26 Liquid Glass
+    (`.glassEffect(...)`) with a material fallback below iOS 26 — a
+    system-native chrome treatment.
+  - The fork's `ModernCard` is a flat opaque card (`Color.chart` fill + hairline
+    border + soft shadow) — a conventional card-design skin, no Liquid Glass.
+  - Upstream also added real *information-architecture* changes with no fork
+    equivalent: `MultiUsePanelState.resolve(...)` is a priority state machine
+    (notifications-disabled > pump-time-mismatch > CGM-stale > max-IOB-zero >
+    stats) that decides what the panel shows; `HomeStatsPanelFace` is a
+    user-switchable stats display (time-in-range / distribution bar /
+    today's averages).
+  - The fork's own `HomeRootView+Modern.swift` states outright: *"Every
+    readout, tap target, gesture and piece of state here is the same as the
+    Classic layout's — this file changes presentation only."* No new
+    information, no priority logic — a different skin over identical content.
+
+  **Conclusion:** upstream's refactor changes *what* information is shown and
+  how it's prioritized; the Modern layout branch changes only *how existing*
+  information looks. Upstream's work does not obsolete it — re-porting is
+  "apply a skin on top of the new structure," not "reconcile two competing
+  designs." Whether it's still worth the effort is a taste call for daily use,
+  not a redundancy call — the file-level collision list in §3 still stands as
+  the actual cost.
+
+**Phase 4 — prevent recurrence**
+
+Keep `upstream` as a permanent remote and sync on **every upstream release tag**.
+The 8 features here were built across ~10 releases of drift; that is why this is a
+re-port instead of a merge.
+
+---
+
+## 8. Runbook
+
+### Done — Linux session, 2026-08-08
+
+No Swift/Xcode toolchain exists in that environment, so Phase 1 steps 1–2 were
+completed there and steps 3–5 were left for a Mac.
+
+```bash
+git remote add upstream https://github.com/nightscout/Trio
+git remote set-url --push upstream DISABLED   # fork safety: never push upstream
+git fetch upstream dev
+git branch spike/upstream-base upstream/dev   # -> 469562376 (0.8.4.47)
+```
+
+`spike/upstream-base` is **local only** — it was deliberately not pushed, since it
+is a verbatim copy of `upstream/dev` and is trivially recreated on any machine
+with the commands above.
+
+**Submodule pre-flight (all 13 verified):** every URL on `spike/upstream-base`
+resolves anonymously, and every pinned commit is fetchable — including the two new
+ones, `AccuChekKit` (`940d19dc`) and `EversenseKit` (`b46c45cc`), and the freshly
+bumped `OmnipodKit` (`e31a8d1c`). No dangling pins; `git submodule update --init
+--recursive` should not stall on a bad reference.
+
+### To do — via GitHub Actions (Phase 1 steps 3–5, no Mac needed)
+
+`spike/upstream-base` is pure `upstream/dev`, which carries only upstream's
+nightscout-gated `unit_tests.yml` — so CI would not run on it as-is. To make the
+spike testable, the branch must be pushed with the single `fork_ci.yml` commit
+cherry-picked on top:
+
+```bash
+git checkout spike/upstream-base
+git cherry-pick <fork_ci.yml commit>
+git push -u origin spike/upstream-base
+```
+
+Then, in the GitHub web UI:
+
+1. **Actions → "Fork CI: build & unit tests"** → confirm it ran green on
+   `spike/upstream-base`. This is the compile + unit-test gate.
+2. **Actions → "4. Build Trio" → Run workflow → branch `spike/upstream-base`.**
+   Produces a TestFlight build of stock upstream `dev`.
+3. Install from TestFlight and run it on the real pump + CGM.
+
+Record the result of the gate here before moving to Phase 2:
+
+- [x] Fork CI ran on `spike/upstream-base` — **compile succeeded, test step failed**
+      ([run 31281337937](https://github.com/ek30gold/Trio/actions/runs/31281337937),
+      2026-08-08)
+- [ ] test suite green — **555/557 passed**; 1 test failing, see below
+- [ ] TestFlight build succeeded — **attempted 2026-08-10, failed at signing, not
+      compiling.** See below.
+- [ ] runs on device with real pump + CGM
+- [ ] lived with stock home refactor — Modern layout verdict: _(keep / drop / partial)_
+- [ ] `SCHEDULED_SYNC` set to `false` in repo variables — **still needs to be done
+      in GitHub Settings**, cannot be set from code
+
+### Run 1 result (2026-08-08): compile clean, one pre-existing test failure
+
+`xcodebuild build-for-testing` succeeded in ~7.5 min. `test-without-building` ran
+557 tests across 80 suites in ~22s and failed 2 assertions, both in the same test:
+`FileStorageTests.testParseSettingsToMgdL` ("Can parse mmol/L settings to mg/dL"),
+`TrioTests/FileStorageTests.swift:137,139`.
+
+```
+✘ Test "Can parse mmol/L settings to mg/dL" recorded an issue at FileStorageTests.swift:137:9:
+    Expectation failed: (wasParsed → false) == true
+✘ Test "Can parse mmol/L settings to mg/dL" recorded an issue at FileStorageTests.swift:139:9:
+    Expectation failed: (parsed?.threshold_setting → 60) == 100
+```
+
+**Read on this failure:** the test saves `threshold_setting = 5.5` (mmol/L) and
+expects `parseOnFileSettingsToMgdL()` to detect and convert it to `100` (mg/dL).
+The observed value, `60`, matches *neither* the input (`5.5`) nor the expected
+output (`100`) — the signature of a stale value left on disk by a different test,
+not a broken conversion. `BaseFileStorage` persists to a real file keyed by
+`OpenAPS.Settings.preferences`, shared across the whole test bundle; the suite
+carries `@Suite(.serialized)` (added in `7c1bd62e6`, already present in our
+v0.8.4 base) which only serializes tests *within* that suite, not against other
+suites touching the same file concurrently. `xcodebuild test-without-building`
+also had no `-parallel-testing-enabled` flag either way, so Swift Testing's
+default concurrent execution across suites stands.
+
+Confirmed this is **not new**: `parseOnFileSettingsToMgdL()` and this test both
+predate the fork's v0.8.4 base commit (`29350e31`) — nothing in the 920-commit
+gap touched them. So this is either a pre-existing flake in upstream's own test
+suite (plausible — `unit_tests.yml` is gated to the nightscout org, so it may
+rarely run against a from-scratch checkout without inherited simulator state) or
+something specific to running the full suite unparallelized-across-suites for the
+first time. Either way: **not a dosing-algorithm regression**, and not something
+introduced by porting our fork's features onto `dev`.
+
+**Root cause confirmed** (not just theorized) by reading the actual code:
+
+1. `Preferences`'s `Decodable` init is deliberately lenient — every field is
+   decoded with `try? container.decode(...)`, starting from `Preferences()`
+   defaults and only overwriting keys present in the JSON
+   (`Preferences.swift:280-330`). A payload missing `threshold_setting` silently
+   keeps the struct default, `60` — which is exactly the observed value.
+2. At least six other production code paths save to that same shared file
+   (`SettingsManager.swift:55`, `DeviceDataManager.swift:108,202`,
+   `AlgorithmAdvancedSettingsProvider.swift:19`, `WatchConfigProvider.swift:16`).
+   Several are DI-resolved services plausibly instantiated as a side effect of
+   *other* suites running concurrently in the same test bundle.
+
+So: this test saves `threshold_setting = 5.5`, and in the window before its own
+two retrieves, a concurrently-running suite resolves one of those services and
+saves *its own* preferences object to the same physical file — a payload that
+omits `threshold_setting` — which the lenient decoder reads back as the default,
+`60`. A real (minor) test-isolation gap in upstream's own suite: one shared file
+across the whole bundle, with `.serialized` only protecting a test against
+others in its *own* suite. Not related to the 920-commit gap or anything this
+fork's features touch.
+
+**Follow-up, not urgent:** confirm by re-running (if the failure moves to a
+different assertion or disappears depending on run order, that supports this
+theory further), and consider filing upstream if reproducible on their own CI.
+Does not block Phase 1 otherwise — 555/557 with an isolated, explained,
+non-dosing failure is a good baseline.
+
+### TestFlight build attempt (2026-08-10): blocked on Apple Developer Portal, not code
+
+Dispatched `build_trio.yml` against `spike/upstream-base`
+([run 31345446720](https://github.com/ek30gold/Trio/actions/runs/31345446720)).
+`check_status` and `check_certs` passed. The `Build` job failed in its
+**"Fastlane Build & Archive"** step after only ~88s inside `gym` — far too fast
+to be a real compile failure (Fork CI's `build-for-testing` alone took ~7.5 min
+on this identical commit). Confirmed by reading the full log: package resolution
+completed normally, no compiler errors anywhere. The actual failure:
+
+```
+error: Provisioning profile "match AppStore org.nightscout.***.trio" doesn't
+  include the Time Sensitive Notifications capability. (in target 'Trio')
+error: Provisioning profile "match AppStore org.nightscout.***.trio" doesn't
+  include the com.apple.developer.usernotifications.time-sensitive entitlement.
+```
+
+Traced to source: `Trio/Resources/Trio.entitlements` gained
+`com.apple.developer.usernotifications.time-sensitive` in commit `a74533e51`,
+**"Add time-sensitive UN entitlement so alerts pierce Focus modes"** — part of
+the alerting/notifications rework in §2 (item 3), a real safety feature (lets
+critical glucose/pump alerts break through iOS Focus/DND) added since the fork's
+v0.8.4 base. Confirmed absent from the entitlements file at `29350e31`.
+
+**This is not fixable by re-running the build or changing code.** The App Store
+provisioning profile is generated by `fastlane match` against whatever
+capabilities are enabled for the App ID on the **Apple Developer Portal**; the
+entitlements file requesting a capability the portal-side App ID doesn't have
+enabled is exactly what `gym` is rejecting. Two steps, both outside this
+environment's reach:
+
+1. **Apple Developer Portal** (developer.apple.com → Certificates, IDs &
+   Profiles → Identifiers → `org.nightscout.***.trio`) → enable the **Time
+   Sensitive Notifications** capability on the App ID.
+2. **Regenerate the App Store provisioning profile** so it picks up the new
+   capability — retry the build (match/sigh may regenerate automatically on
+   detecting the mismatch now that the portal side is fixed), or force it via
+   the repo's `ENABLE_NUKE_CERTS` variable / the `create_certs.yml` workflow if
+   a plain retry doesn't pick it up.
+
+**This blocks every future build containing this entitlement**, not just this
+spike — any `dev`-based work, and any future v0.8.5-based work if the entitlement
+is present there too, will fail identically at the same step until the portal
+capability is enabled. Worth doing regardless of the Phase 0 base decision.
+
+**Workflow bug found and fixed in the same run:** `fork_ci.yml`'s original
+"Annotate test results" step grepped the log for the literal string
+`"Failing tests:"`, which is XCTest's failure-summary marker. Swift Testing (used
+by the newer `@Test`/`@Suite` tests, including the one above) never prints that
+string — its own failure summary is `Test run with N tests in M suites failed`.
+Result: **the annotation printed "✅ All tests passed" on a run that had just
+failed**, even though the job's actual pass/fail status (and exit code 65) were
+correct throughout. Fixed by keying the annotation off the "Run tests" step's own
+`outcome` instead of re-deriving it from a log grep, with log parsing now used
+only for the best-effort failing-test list (extended to also match Swift
+Testing's `✘ Test "Name" failed after ...` format). Verified against the real
+failure log above before trusting it. Not yet re-run through CI to confirm end to
+end — the offline check reproduces the exact bug and fix against real log text,
+which was enough to trust it, but a future CI run on this workflow file will be
+the first live confirmation.
