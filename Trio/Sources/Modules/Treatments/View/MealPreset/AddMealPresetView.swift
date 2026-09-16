@@ -5,6 +5,7 @@ import SwiftUI
 
 struct AddMealPresetView: View {
     @Binding var dish: String
+    @Binding var note: String
     @Binding var presetCarbs: Decimal
     @Binding var presetFat: Decimal
     @Binding var presetProtein: Decimal
@@ -35,6 +36,11 @@ struct AddMealPresetView: View {
                         text: $dish,
                         placeholder: String(localized: "Name Of Dish"),
                         maxLength: 25
+                    )
+                    TextFieldWithToolBarString(
+                        text: $note,
+                        placeholder: String(localized: "Serving size or notes (optional)"),
+                        maxLength: 50
                     )
                 } header: {
                     Text("New Preset")
