@@ -52,6 +52,7 @@ enum Screen: Identifiable, Hashable {
     case appDiagnostics
     case settingsExport
     case treatmentsSettings
+    case manageMealPresets
 
     var id: Int { String(reflecting: self).hashValue }
 }
@@ -171,7 +172,24 @@ extension Screen {
             SettingsExport.RootView(resolver: resolver)
         case .treatmentsSettings:
             TreatmentsSettingsView(resolver: resolver, state: Settings.StateModel())
+        case .manageMealPresets:
+            ManageMealPresetsView(state: standaloneMealPresetsState(resolver: resolver))
         }
+    }
+
+    /// `ManageMealPresetsView` is normally reached from `MealPresetView` with an already-active,
+    /// already-configured `Treatments.StateModel` (see `TreatmentsRootView`/`MealPresetView`).
+    /// Reached directly from Settings there is no such instance, so build a standalone one here:
+    /// assign `resolver` (which injects `settingsManager` etc. via `BaseStateModel`, but does
+    /// *not* run the full bolus-calculator setup, since that only fires when `isActive` is true),
+    /// then mirror the one field `setupSettings()` would otherwise have set, and prefetch the
+    /// preset list so the screen isn't empty on first appearance.
+    private func standaloneMealPresetsState(resolver: Resolver) -> Treatments.StateModel {
+        let state = Treatments.StateModel()
+        state.resolver = resolver
+        state.useFPUconversion = state.settingsManager.settings.useFPUconversion
+        state.setupMealPresetsArray()
+        return state
     }
 
     func modal(resolver: Resolver) -> Main.Modal {

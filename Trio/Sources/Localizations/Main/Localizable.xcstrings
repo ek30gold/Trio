@@ -192013,6 +192013,9 @@
         }
       }
     },
+    "Manage" : {
+
+    },
     "Manage iOS Preferences" : {
       "localizations" : {
         "bg" : {
@@ -192142,6 +192145,9 @@
           }
         }
       }
+    },
+    "Manage Meal Presets" : {
+
     },
     "Manager Identifier" : {
       "comment" : "The title of the parameter for the manager identifier in the StopCriticalAlertIntent.",
@@ -265165,6 +265171,9 @@
           }
         }
       }
+    },
+    "Serving size or notes (optional)" : {
+
     },
     "Set a custom time for peak insulin effect." : {
       "comment" : "Mini Hint for Insulin Peak Time",

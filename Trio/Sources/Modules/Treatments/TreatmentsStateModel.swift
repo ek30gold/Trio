@@ -105,6 +105,7 @@ extension Treatments {
         var dish: String = ""
         var selection: MealPresetStored?
         var summation: [String] = []
+        var mealPresets: [MealPresetStored] = []
         var maxCarbs: Decimal = 0
         var maxFat: Decimal = 0
         var maxProtein: Decimal = 0
@@ -275,12 +276,14 @@ extension Treatments {
                     debug(.default, "Failed to setup bolus state concurrently: \(error)")
                 }
 
-                // viewContext-bound FRCs: guard and wiring share one main-actor slice.
+                // viewContext-bound FRCs (and the meal-preset array, also fetched from
+                // viewContext): guard and wiring share one main-actor slice.
                 await MainActor.run {
                     guard !Task.isCancelled, !self.hasCleanedUp else { return }
                     self.setupGlucoseController()
                     self.setupDeterminationController()
                     self.setupLastBolusController()
+                    self.setupMealPresetsArray()
                 }
             }
         }
@@ -768,6 +771,35 @@ extension Treatments {
 
         func addToSummation() {
             summation.append(selection?.dish ?? "")
+        }
+
+        /// Refetches saved meal presets from `viewContext`, ordered by their manually-set
+        /// `orderPosition`. Cheap synchronous CoreData read; safe to call from the main thread
+        /// after any add/edit/delete/reorder so the cached array stays in sync.
+        func setupMealPresetsArray() {
+            let request: NSFetchRequest<MealPresetStored> = MealPresetStored.fetchRequest()
+            request.sortDescriptors = [NSSortDescriptor(key: "orderPosition", ascending: true)]
+            do {
+                mealPresets = try viewContext.fetch(request)
+            } catch {
+                debug(.default, "\(DebuggingIdentifiers.failed) Failed to fetch meal presets: \(error)")
+            }
+        }
+
+        /// Persists a manual reorder of the meal-preset list by rewriting every preset's
+        /// `orderPosition` to match its new index, then saving and refetching.
+        func reorderMealPreset(from source: IndexSet, to destination: Int) {
+            mealPresets.move(fromOffsets: source, toOffset: destination)
+            for (index, preset) in mealPresets.enumerated() {
+                preset.orderPosition = Int16(index + 1)
+            }
+            do {
+                guard viewContext.hasChanges else { return }
+                try viewContext.save()
+                setupMealPresetsArray()
+            } catch {
+                debug(.default, "\(DebuggingIdentifiers.failed) Failed to save meal preset order: \(error)")
+            }
         }
     }
 }
