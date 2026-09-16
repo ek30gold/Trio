@@ -2,6 +2,7 @@ import Combine
 import CoreData
 import Foundation
 import SwiftUI
+import UserNotifications
 
 extension Adjustments.StateModel {
     // MARK: - Enact Overrides
@@ -369,6 +370,76 @@ extension Adjustments.StateModel {
         }
 
         return percentage
+    }
+
+    // MARK: - Scheduled Overrides
+
+    /// Sets up the array of scheduled (not-yet-started) Overrides for UI display.
+    func setupScheduledOverridesArray() {
+        Task {
+            do {
+                let ids = try await overrideStorage.fetchScheduledOverrides()
+                await updateScheduledOverridesArray(with: ids)
+            } catch {
+                debug(.default, "\(DebuggingIdentifiers.failed) Failed to setup scheduled overrides: \(error)")
+            }
+        }
+    }
+
+    @MainActor private func updateScheduledOverridesArray(with IDs: [NSManagedObjectID]) async {
+        do {
+            let overrideObjects = try IDs.compactMap { id in
+                try viewContext.existingObject(with: id) as? OverrideStored
+            }
+            scheduledOverrides = overrideObjects
+        } catch {
+            debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to extract scheduled overrides: \(error)")
+        }
+    }
+
+    /// Cancels a scheduled Override: removes its own local notification (never any other
+    /// scheduled Override's — see `activationNotificationID`), deletes the row and refreshes the
+    /// list. There is nothing to stop on the dosing side: a scheduled Override that has not yet
+    /// activated never set `enabled`, so cancellation is just removing the pending row.
+    func cancelScheduledOverride(_ objectID: NSManagedObjectID) async {
+        if let override = try? viewContext.existingObject(with: objectID) as? OverrideStored,
+           let scheduledDate = override.date
+        {
+            UNUserNotificationCenter.current()
+                .removePendingNotificationRequests(withIdentifiers: [Self.activationNotificationID(for: scheduledDate)])
+        }
+        await overrideStorage.deleteOverridePreset(objectID)
+        setupScheduledOverridesArray()
+    }
+
+    /// Unique per scheduled start time, so multiple scheduled Overrides do not overwrite or cancel
+    /// each other's notifications.
+    static func activationNotificationID(for scheduledDate: Date) -> String {
+        "scheduledOverrideActivation-\(scheduledDate.timeIntervalSince1970)"
+    }
+
+    /// Sends a purely informational local notification when an Override is scheduled. Activation
+    /// itself never depends on this notification or on the app being open to receive it — it is
+    /// driven entirely by `ScheduledOverrideManager`'s catch-up on the glucose pulse.
+    func sendScheduledOverrideActivationNotification(name: String, scheduledDate: Date) async {
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "Override Scheduled")
+        content.body = String(
+            localized: "\(name) will start at \(DateFormatter.localizedString(from: scheduledDate, dateStyle: .none, timeStyle: .short))."
+        )
+        content.sound = .default
+
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: scheduledDate)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+
+        let request = UNNotificationRequest(
+            identifier: Self.activationNotificationID(for: scheduledDate),
+            content: content,
+            trigger: trigger
+        )
+
+        try? await UNUserNotificationCenter.current().add(request)
     }
 }
 

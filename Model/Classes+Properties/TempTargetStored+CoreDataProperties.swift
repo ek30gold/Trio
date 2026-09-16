@@ -12,6 +12,9 @@ public extension TempTargetStored {
     @NSManaged var halfBasalTarget: NSDecimalNumber?
     @NSManaged var id: UUID?
     @NSManaged var isPreset: Bool
+    /// Marks a Temp Target created by "Schedule" that has not yet been activated. Without it a
+    /// pending scheduled Temp Target is indistinguishable from a cancelled one.
+    @NSManaged var isScheduled: Bool
     @NSManaged var isUploadedToNS: Bool
     @NSManaged var name: String?
     @NSManaged var orderPosition: Int16

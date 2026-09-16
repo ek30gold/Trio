@@ -45,6 +45,7 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
     @Injected() var pluginCGMManager: PluginManager!
     @Injected() var calibrationService: CalibrationService!
     @Injected() var trioAlertManager: TrioAlertManager!
+    @Injected() var scheduledOverrideManager: ScheduledOverrideManager!
 
     private var lifetime = Lifetime()
     private let timer = DispatchTimer(timeInterval: 1.minutes.timeInterval)
@@ -93,6 +94,17 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
             .receive(on: processQueue)
             .flatMap { [self] _ -> AnyPublisher<[BloodGlucose], Never> in
                 debug(.nightscout, "FetchGlucoseManager timer heartbeat")
+
+                // Activate any scheduled Override or Temp Target that has come due. This sits on
+                // the timer pulse rather than on glucose arrival so it still runs during a CGM
+                // gap, and outside the Adjustments state model so it survives the app being
+                // terminated and relaunched in the background — the failure that made scheduled
+                // Overrides silently never start.
+                Task {
+                    await self.scheduledOverrideManager.catchUpOnDueScheduledOverrides()
+                    await self.scheduledOverrideManager.catchUpOnDueScheduledTempTargets()
+                }
+
                 if let glucoseSource = self.glucoseSource {
                     return glucoseSource.fetch(self.timer).eraseToAnyPublisher()
                 } else {

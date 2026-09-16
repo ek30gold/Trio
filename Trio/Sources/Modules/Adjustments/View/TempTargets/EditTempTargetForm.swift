@@ -25,6 +25,7 @@ struct EditTempTargetForm: View {
     @State private var isUsingSlider = false
     @State private var isPreset = false
     @State private var isEnabled = false
+    @State private var scheduledDate: Date = Date().addingTimeInterval(3600)
 
     init(tempTargetToEdit: TempTargetStored, state: Adjustments.StateModel) {
         tempTarget = tempTargetToEdit
@@ -61,6 +62,7 @@ struct EditTempTargetForm: View {
             List {
                 editTempTarget()
                 saveButton
+                scheduleSection
             }
             .listSectionSpacing(10)
             .padding(.top, 30)
@@ -384,6 +386,80 @@ struct EditTempTargetForm: View {
 
             Spacer()
         }.listRowBackground(hasChanges ? Color(.systemBlue) : Color(.systemGray4))
+    }
+
+    /// Lets the current settings be scheduled to start later (up to 72h ahead) instead of now.
+    /// This always creates a new, separate Temp Target row — it never repurposes `tempTarget`, the
+    /// row this form edits in place, so scheduling from an existing Temp Target or Preset never
+    /// changes what that row itself does.
+    private var scheduleSection: some View {
+        let scheduleIsDisabled = scheduledDate <= Date() || hasSchedulingConflict
+
+        return Section(header: Text("Schedule Temp Target")) {
+            DatePicker(
+                String(localized: "Start Time"),
+                selection: $scheduledDate,
+                in: Date().addingTimeInterval(60)...Date().addingTimeInterval(72 * 3600),
+                displayedComponents: [.date, .hourAndMinute]
+            )
+            if let message = schedulingConflictMessage {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(Color.red)
+            }
+            Button(action: scheduleTempTarget) {
+                Text("Schedule Temp Target")
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .disabled(scheduleIsDisabled)
+        }
+        .listRowBackground(scheduleIsDisabled ? Color(.systemGray4) : Color(.systemBlue))
+    }
+
+    private func scheduleTempTarget() {
+        Task {
+            do {
+                let newTempTarget = TempTarget(
+                    name: name.isEmpty ? String(localized: "Custom Target") : name,
+                    createdAt: scheduledDate,
+                    targetTop: target,
+                    targetBottom: target,
+                    duration: duration,
+                    enteredBy: TempTarget.local,
+                    reason: TempTarget.custom,
+                    isPreset: false,
+                    enabled: false,
+                    halfBasalTarget: halfBasalTarget,
+                    isScheduled: true
+                )
+                try await state.tempTargetStorage.storeTempTarget(tempTarget: newTempTarget)
+                state.setupScheduledTempTargetsArray()
+                await state.sendScheduledTempTargetNotification(name: name, scheduledDate: scheduledDate)
+                presentationMode.wrappedValue.dismiss()
+            } catch {
+                debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to schedule temp target")
+            }
+        }
+    }
+
+    /// True when the proposed schedule window overlaps an already scheduled Temp Target. Two Temp
+    /// Targets with overlapping windows would leave it ambiguous which one the catch-up service
+    /// should start, so scheduling is blocked instead of silently picking one.
+    private var hasSchedulingConflict: Bool {
+        let newStart = scheduledDate
+        let newEnd = newStart.addingTimeInterval(Double(truncating: duration as NSDecimalNumber) * 60)
+
+        for existing in state.scheduledTempTargets {
+            guard let existingStart = existing.date else { continue }
+            let existingEnd = existingStart.addingTimeInterval((existing.duration?.doubleValue ?? 0) * 60)
+            if newStart < existingEnd, newEnd > existingStart { return true }
+        }
+        return false
+    }
+
+    private var schedulingConflictMessage: String? {
+        guard hasSchedulingConflict else { return nil }
+        return String(localized: "Selected time conflicts with an existing scheduled temp target.")
     }
 
     private func saveChanges() {

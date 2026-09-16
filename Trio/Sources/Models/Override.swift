@@ -21,4 +21,8 @@ struct Override {
     let end: Decimal
     let smbMinutes: Decimal
     let uamMinutes: Decimal
+    /// True only for an Override created by "Schedule Override" that has not started yet.
+    /// Cleared once the Override is activated, so a finished or cancelled Override is never
+    /// mistaken for one still waiting to start.
+    var isScheduled: Bool = false
 }
