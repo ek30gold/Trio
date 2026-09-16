@@ -635,6 +635,7 @@
 		BDF34EBE2C0A31D100D51995 /* CustomNotification.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF34EBD2C0A31D000D51995 /* CustomNotification.swift */; };
 		BDF34F832C10C5B600D51995 /* DataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF34F822C10C5B600D51995 /* DataManager.swift */; };
 		BDF34F852C10C62E00D51995 /* GlucoseData.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF34F842C10C62E00D51995 /* GlucoseData.swift */; };
+		690098E6D8BE2A808EB37ABD /* BasalData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EA12861391473E01AA5A014 /* BasalData.swift */; };
 		BDF34F902C10CF8C00D51995 /* CoreDataStack.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF34F8F2C10CF8C00D51995 /* CoreDataStack.swift */; };
 		BDF34F932C10D0E100D51995 /* LiveActivityAttributes+Helper.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF34F922C10D0E100D51995 /* LiveActivityAttributes+Helper.swift */; };
 		BDF34F952C10D27300D51995 /* DeterminationData.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF34F942C10D27300D51995 /* DeterminationData.swift */; };
@@ -1716,6 +1717,7 @@
 		BDF34EBD2C0A31D000D51995 /* CustomNotification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomNotification.swift; sourceTree = "<group>"; };
 		BDF34F822C10C5B600D51995 /* DataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataManager.swift; sourceTree = "<group>"; };
 		BDF34F842C10C62E00D51995 /* GlucoseData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlucoseData.swift; sourceTree = "<group>"; };
+		1EA12861391473E01AA5A014 /* BasalData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BasalData.swift; sourceTree = "<group>"; };
 		BDF34F8F2C10CF8C00D51995 /* CoreDataStack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreDataStack.swift; sourceTree = "<group>"; };
 		BDF34F922C10D0E100D51995 /* LiveActivityAttributes+Helper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LiveActivityAttributes+Helper.swift"; sourceTree = "<group>"; };
 		BDF34F942C10D27300D51995 /* DeterminationData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeterminationData.swift; sourceTree = "<group>"; };
@@ -3958,6 +3960,7 @@
 				BDF34F822C10C5B600D51995 /* DataManager.swift */,
 				BDF34F842C10C62E00D51995 /* GlucoseData.swift */,
 				BDF34F942C10D27300D51995 /* DeterminationData.swift */,
+				1EA12861391473E01AA5A014 /* BasalData.swift */,
 				BDBAACF92C2D439700370AAE /* OverrideData.swift */,
 				4B8F3B0E159844FD8746DFC0 /* TempTargetData.swift */,
 			);
@@ -5822,6 +5825,7 @@
 				F90692D3274B9A130037068D /* AppleHealthKitRootView.swift in Sources */,
 				3B5CD2A52D4AEA5D00CE213C /* Date+MinutesFromMidnight.swift in Sources */,
 				BDF34F852C10C62E00D51995 /* GlucoseData.swift in Sources */,
+				690098E6D8BE2A808EB37ABD /* BasalData.swift in Sources */,
 				DD30BA082E076CAA00DA677C /* DeterminationError.swift in Sources */,
 				19E1F7EC29D082FE005C8D20 /* IconConfigStateModel.swift in Sources */,
 				DD1745222C55524800211FAC /* SMBSettingsProvider.swift in Sources */,

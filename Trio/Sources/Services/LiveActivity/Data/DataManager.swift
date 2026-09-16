@@ -106,6 +106,62 @@ extension LiveActivityManager {
         }
     }
 
+    /// The temp basal that is currently running, as far as pump history can tell.
+    ///
+    /// This is deliberately not a `BasalData`: pump history can only answer half of the question.
+    /// The scheduled-profile fallback and the pump suspension state are layered on by
+    /// `LiveActivityManager.loadBasal()`, which can await file storage and read `APSManager`.
+    struct ActiveTempBasal {
+        /// The temp basal's rate, or `nil` if the stored event carries no rate.
+        let rate: Decimal?
+    }
+
+    /// Fetches the temp basal that is currently running, if any.
+    ///
+    /// - Returns: `nil` when no temp basal is running right now, in which case the caller is expected
+    /// to fall back to the scheduled basal profile. A non-`nil` result means a temp basal *is* running.
+    func fetchAndMapBasal() async throws -> ActiveTempBasal? {
+        let context = CoreDataStack.shared.newTaskContext()
+        context.name = "fetchAndMapBasal"
+
+        // A scheduled-basal row is a rate assertion, not a running temp basal (see
+        // `GarminManager.fetchTempBasals()`, which excludes it the same way) -- with fetchLimit 1
+        // it would otherwise be mistaken for "the current temp basal".
+        let tempBasalPredicate = NSPredicate(format: "tempBasal != nil AND tempBasal.isScheduledBasal == NO")
+        let compoundPredicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            NSPredicate.pumpHistoryLast24h,
+            tempBasalPredicate
+        ])
+
+        let results = try await CoreDataStack.shared.fetchEntitiesAsync(
+            ofType: PumpEventStored.self,
+            onContext: context,
+            predicate: compoundPredicate,
+            key: "timestamp",
+            ascending: false,
+            fetchLimit: 1,
+            relationshipKeyPathsForPrefetching: ["tempBasal"]
+        )
+
+        return try await context.perform {
+            guard let pumpEvents = results as? [PumpEventStored] else {
+                throw CoreDataError.fetchError(function: #function, file: #file)
+            }
+
+            // `endDate` is the stored span's actual expiration (see `PumpHistoryStorage.storedSpan`),
+            // so checking it directly is more reliable than recomputing "timestamp + duration"
+            // ourselves. Once it has passed, this temp basal has lapsed back to the scheduled rate.
+            guard let latestTempBasal = pumpEvents.first?.tempBasal,
+                  let endDate = latestTempBasal.endDate,
+                  endDate > Date()
+            else {
+                return nil
+            }
+
+            return ActiveTempBasal(rate: latestTempBasal.rate?.decimalValue)
+        }
+    }
+
     func fetchAndMapTempTarget() async throws -> TempTargetData? {
         try await fetchAndMapLatest(
             ofType: TempTargetStored.self,
