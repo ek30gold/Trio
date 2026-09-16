@@ -35,6 +35,7 @@ struct EditOverrideForm: View {
     @State private var displayPickerTarget: Bool = false
     @State private var displayPickerDisableSmbSchedule: Bool = false
     @State private var displayPickerSmbMinutes: Bool = false
+    @State private var scheduledDate: Date = Date().addingTimeInterval(3600)
 
     init(overrideToEdit: OverrideStored, state: Adjustments.StateModel) {
         override = overrideToEdit
@@ -83,6 +84,7 @@ struct EditOverrideForm: View {
             List {
                 editOverride()
                 saveButton
+                scheduleSection
             }
             .listSectionSpacing(10)
             .padding(.top, 30)
@@ -549,6 +551,95 @@ struct EditOverrideForm: View {
             }
         )
         .listRowBackground(isInvalid ? Color(.systemGray4) : Color(.systemBlue))
+    }
+
+    /// Lets the current settings be scheduled to start later (up to 72h ahead) instead of now.
+    /// This always creates a new, separate Override row — it never repurposes `override`, the row
+    /// this form edits in place, so scheduling from an existing Override or Preset never changes
+    /// what that row itself does.
+    private var scheduleSection: some View {
+        let scheduleIsDisabled = scheduledDate <= Date() || hasSchedulingConflict
+
+        return Section(header: Text("Schedule Override")) {
+            DatePicker(
+                String(localized: "Start Time"),
+                selection: $scheduledDate,
+                in: Date().addingTimeInterval(60)...Date().addingTimeInterval(72 * 3600),
+                displayedComponents: [.date, .hourAndMinute]
+            )
+            if let message = schedulingConflictMessage {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(Color.red)
+            }
+            Button(action: scheduleOverride) {
+                Text("Schedule Override")
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .tint(.white)
+            }
+            .disabled(scheduleIsDisabled)
+        }
+        .listRowBackground(scheduleIsDisabled ? Color(.systemGray4) : Color(.systemBlue))
+    }
+
+    private func scheduleOverride() {
+        Task {
+            do {
+                let newOverride = Override(
+                    name: name,
+                    enabled: false,
+                    date: scheduledDate,
+                    duration: duration,
+                    indefinite: indefinite,
+                    percentage: percentage,
+                    smbIsOff: smbIsOff,
+                    isPreset: false,
+                    id: "",
+                    overrideTarget: target_override,
+                    target: target ?? 0,
+                    advancedSettings: advancedSettings,
+                    isfAndCr: isfAndCr,
+                    isf: isf,
+                    cr: cr,
+                    smbIsScheduledOff: smbIsScheduledOff,
+                    start: start ?? 0,
+                    end: end ?? 0,
+                    smbMinutes: smbMinutes ?? state.defaultSmbMinutes,
+                    uamMinutes: uamMinutes ?? state.defaultUamMinutes,
+                    isScheduled: true
+                )
+                try await state.overrideStorage.storeOverride(override: newOverride)
+                state.setupScheduledOverridesArray()
+                await state.sendScheduledOverrideActivationNotification(name: name, scheduledDate: scheduledDate)
+                presentationMode.wrappedValue.dismiss()
+            } catch {
+                debugPrint("\(DebuggingIdentifiers.failed) \(#file) \(#function) Failed to schedule override")
+            }
+        }
+    }
+
+    /// True when the proposed schedule window overlaps an already scheduled Override. Two
+    /// Overrides with overlapping windows would leave it ambiguous which one the catch-up service
+    /// should start, so scheduling is blocked instead of silently picking one.
+    private var hasSchedulingConflict: Bool {
+        let newStart = scheduledDate
+        let newEnd = indefinite
+            ? Date.distantFuture
+            : newStart.addingTimeInterval(Double(truncating: duration as NSDecimalNumber) * 60)
+
+        for existing in state.scheduledOverrides {
+            guard let existingStart = existing.date else { continue }
+            let existingEnd = existing.indefinite
+                ? Date.distantFuture
+                : existingStart.addingTimeInterval((existing.duration?.doubleValue ?? 0) * 60)
+            if newStart < existingEnd, newEnd > existingStart { return true }
+        }
+        return false
+    }
+
+    private var schedulingConflictMessage: String? {
+        guard hasSchedulingConflict else { return nil }
+        return String(localized: "Selected time conflicts with an existing scheduled override.")
     }
 
     private func isOverrideInvalid() -> (Bool, String?) {

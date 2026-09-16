@@ -6,11 +6,86 @@ extension Adjustments.RootView {
         if state.isOverrideEnabled, state.activeOverrideName.isNotEmpty {
             currentActiveAdjustment
         }
+        if !state.scheduledOverrides.isEmpty {
+            scheduledOverrideBanner
+            scheduledOverridesSection
+        }
         if state.overridePresets.isNotEmpty {
             overridePresets
         } else {
             defaultText
         }
+    }
+
+    /// One banner per scheduled Override, so a conflicting second one (blocked at scheduling time)
+    /// can never hide the first.
+    private var scheduledOverrideBanner: some View {
+        ForEach(state.scheduledOverrides) { override in
+            Section {
+                HStack {
+                    Text(
+                        "\(override.name ?? String(localized: "Override")) " +
+                            String(localized: "is scheduled for") +
+                            " \(formattedScheduledTime(for: override.date))"
+                    )
+                    .foregroundStyle(.white)
+                    Spacer()
+                    Button {
+                        Task {
+                            await state.cancelScheduledOverride(override.objectID)
+                        }
+                    } label: {
+                        Text(String(localized: "Cancel Future Override"))
+                            .foregroundStyle(.white)
+                            .bold()
+                    }
+                    .buttonStyle(.plain)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    selectedOverride = override
+                    state.showOverrideEditSheet = true
+                }
+            }
+            .listRowBackground(Color.purple.opacity(0.8))
+        }
+    }
+
+    private var scheduledOverridesSection: some View {
+        Section {
+            ForEach(state.scheduledOverrides) { override in
+                HStack {
+                    Text(override.name ?? String(localized: "Scheduled Override"))
+                    Spacer()
+                    Text("Starts in \(formattedTimeRemaining((override.date ?? Date()).timeIntervalSinceNow))")
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    selectedOverride = override
+                    state.showOverrideEditSheet = true
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        Task { await state.cancelScheduledOverride(override.objectID) }
+                    } label: {
+                        Label(String(localized: "Cancel"), systemImage: "xmark.circle.fill")
+                    }
+                }
+            }
+            .listRowBackground(Color.chart)
+        } header: {
+            Text("Scheduled Overrides")
+        }
+    }
+
+    private func formattedScheduledTime(for date: Date?) -> String {
+        guard let date else { return "" }
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return formatter.string(from: date)
     }
 
     var overridePresets: some View {
@@ -97,6 +172,12 @@ extension Adjustments.RootView {
                 Label("Edit", systemImage: "pencil")
             }
             .tint(.blue)
+            Button {
+                selectedOverride = preset
+                state.showOverrideEditSheet = true
+            } label: {
+                Label(String(localized: "Schedule"), systemImage: "clock")
+            }
         }
     }
 

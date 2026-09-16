@@ -1,6 +1,7 @@
 import Combine
 import CoreData
 import Foundation
+import UserNotifications
 
 extension Adjustments.StateModel {
     // MARK: - State Initialization and Updates
@@ -132,10 +133,22 @@ extension Adjustments.StateModel {
         }
     }
 
-    /// Saves a scheduled Temp Target and activates it at the specified date.
+    /// Saves a scheduled Temp Target and registers it for future activation.
+    ///
+    /// This only stores the row with `isScheduled = true` and returns — it does not wait for the
+    /// start time itself. The previous implementation did, with a private `waitUntilDate` helper
+    /// (removed): an in-process `Task.sleep` armed only while this state model was alive, i.e. only
+    /// while the Adjustments screen had been opened at least once since app launch. If Trio was
+    /// terminated and relaunched in the background, nothing re-armed it and the Temp Target never
+    /// started.
+    /// Activation is now driven entirely by `ScheduledOverrideManager`'s catch-up on the glucose
+    /// pulse, which runs regardless of which screen the user is on, and which activates through
+    /// `AdjustmentManager` — the single writer for adjustment activation — rather than through a
+    /// second, competing Core Data transaction here.
     func saveScheduledTempTarget() async throws {
-        let date = self.date
-        guard date > Date() else { return }
+        let scheduledDate = date
+        guard scheduledDate > Date(),
+              scheduledDate <= Date().addingTimeInterval(72 * 3600) else { return }
 
         let adjustmentType = halfBasalTarget == settingHalfBasalTarget ? "Standard" : "Custom"
         debug(
@@ -144,7 +157,7 @@ extension Adjustments.StateModel {
         )
         let tempTarget = TempTarget(
             name: tempTargetName,
-            createdAt: date,
+            createdAt: scheduledDate,
             targetTop: tempTargetTarget,
             targetBottom: tempTargetTarget,
             duration: tempTargetDuration,
@@ -152,56 +165,12 @@ extension Adjustments.StateModel {
             reason: TempTarget.custom,
             isPreset: false,
             enabled: false,
-            halfBasalTarget: halfBasalTarget
+            halfBasalTarget: halfBasalTarget,
+            isScheduled: true
         )
         try await tempTargetStorage.storeTempTarget(tempTarget: tempTarget)
         setupScheduledTempTargetsArray()
-        await waitUntilDate(date)
-        await disableAllActiveTempTargets(createTempTargetRunEntry: true)
-        await enableScheduledTempTarget(for: date)
-        tempTargetStorage.saveTempTargetsToStorage([tempTarget])
-    }
-
-    /// Enables a scheduled Temp Target for a specific date.
-    func enableScheduledTempTarget(for date: Date) async {
-        do {
-            let ids = try await tempTargetStorage.fetchScheduledTempTarget(for: date)
-            guard let firstID = ids.first else {
-                debug(.default, "No Temp Target found for the specified date.")
-                return
-            }
-            await setCurrentTempTarget(from: ids)
-
-            try await MainActor.run {
-                guard let tempTarget = try viewContext.existingObject(with: firstID) as? TempTargetStored else {
-                    throw NSError(
-                        domain: "TempTarget",
-                        code: -1,
-                        userInfo: [NSLocalizedDescriptionKey: "Failed to find temp target"]
-                    )
-                }
-
-                tempTarget.enabled = true
-                try viewContext.save()
-                isTempTargetEnabled = true
-            }
-
-            setupScheduledTempTargetsArray()
-        } catch {
-            debug(
-                .default,
-                "\(DebuggingIdentifiers.failed) Failed to enable scheduled temp target: \(error)"
-            )
-        }
-    }
-
-    /// Waits until a target date before proceeding.
-    private func waitUntilDate(_ targetDate: Date) async {
-        while Date() < targetDate {
-            let timeInterval = targetDate.timeIntervalSince(Date())
-            let sleepDuration = min(timeInterval, 60.0)
-            try? await Task.sleep(nanoseconds: UInt64(sleepDuration * 1_000_000_000))
-        }
+        await sendScheduledTempTargetNotification(name: tempTargetName, scheduledDate: scheduledDate)
     }
 
     /// Saves a custom Temp Target and disables existing ones.
@@ -386,6 +355,24 @@ extension Adjustments.StateModel {
         setupScheduledTempTargetsArray()
     }
 
+    /// Cancels a scheduled Temp Target: removes its own local notification (never any other
+    /// scheduled Temp Target's — see `tempTargetActivationNotificationID`), deletes the row and
+    /// refreshes the list. There is nothing to stop on the dosing side: a scheduled Temp Target
+    /// that has not yet activated never set `enabled`, so cancellation is just removing the
+    /// pending row.
+    func cancelScheduledTempTarget(_ objectID: NSManagedObjectID) async {
+        if let tempTarget = try? viewContext.existingObject(with: objectID) as? TempTargetStored,
+           let scheduledDate = tempTarget.date
+        {
+            UNUserNotificationCenter.current()
+                .removePendingNotificationRequests(
+                    withIdentifiers: [Self.tempTargetActivationNotificationID(for: scheduledDate)]
+                )
+        }
+        await tempTargetStorage.deleteTempTargetPreset(objectID)
+        setupScheduledTempTargetsArray()
+    }
+
     /// Resets Temp Target state variables.
     @MainActor func resetTempTargetState() async {
         tempTargetName = ""
@@ -421,6 +408,41 @@ extension Adjustments.StateModel {
         else { return Double(autosensMax * 100) } // oref defined limit for increased insulin delivery
         let maxSens = calcTarget > TempTargetCalculations.normalTarget ? 95 : Double(autosensMax * 100)
         return maxSens
+    }
+
+    // MARK: - Scheduled Temp Target Notification
+
+    /// Unique per scheduled start time, so multiple scheduled Temp Targets do not overwrite or
+    /// cancel each other's notifications.
+    static func tempTargetActivationNotificationID(for scheduledDate: Date) -> String {
+        "scheduledTempTargetActivation-\(scheduledDate.timeIntervalSince1970)"
+    }
+
+    /// Sends a purely informational local notification when a Temp Target is scheduled.
+    /// Activation itself never depends on this notification or on the app being open to receive
+    /// it — it is driven entirely by `ScheduledOverrideManager`'s catch-up on the glucose pulse.
+    func sendScheduledTempTargetNotification(name: String, scheduledDate: Date) async {
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "Temp Target Scheduled")
+        content.body = name.isEmpty
+            ? String(localized: "A temp target will start at \(DateFormatter.localizedString(from: scheduledDate, dateStyle: .none, timeStyle: .short)).")
+            : String(
+                localized: "\(name) will start at \(DateFormatter.localizedString(from: scheduledDate, dateStyle: .none, timeStyle: .short))."
+            )
+        content.sound = .default
+
+        let triggerDate = Calendar.current.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second],
+            from: scheduledDate
+        )
+        let trigger = UNCalendarNotificationTrigger(dateMatching: triggerDate, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: Self.tempTargetActivationNotificationID(for: scheduledDate),
+            content: content,
+            trigger: trigger
+        )
+
+        try? await UNUserNotificationCenter.current().add(request)
     }
 }
 

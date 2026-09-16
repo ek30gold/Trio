@@ -7,6 +7,7 @@ extension Adjustments.RootView {
             currentActiveAdjustment
         }
         if state.scheduledTempTargets.isNotEmpty {
+            scheduledTempTargetBanner
             scheduledTempTargets
         }
         if state.tempTargetPresets.isNotEmpty {
@@ -16,18 +17,74 @@ extension Adjustments.RootView {
         }
     }
 
+    /// One banner per scheduled Temp Target, so a conflicting second one (blocked at scheduling
+    /// time) can never hide the first.
+    private var scheduledTempTargetBanner: some View {
+        ForEach(state.scheduledTempTargets) { tempTarget in
+            Section {
+                HStack {
+                    Text(
+                        "\(tempTarget.name ?? String(localized: "Temp Target")) " +
+                            String(localized: "is scheduled for") +
+                            " \(formattedScheduledTempTargetTime(for: tempTarget))"
+                    )
+                    .foregroundStyle(.white)
+                    Spacer()
+                    Button {
+                        Task {
+                            await state.cancelScheduledTempTarget(tempTarget.objectID)
+                        }
+                    } label: {
+                        Text(String(localized: "Cancel Future Temp Target"))
+                            .foregroundStyle(.white)
+                            .bold()
+                    }
+                    .buttonStyle(.plain)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    selectedTempTarget = tempTarget
+                    state.showTempTargetEditSheet = true
+                }
+            }
+            .listRowBackground(Color.purple.opacity(0.8))
+        }
+    }
+
     private var scheduledTempTargets: some View {
         Section {
             ForEach(state.scheduledTempTargets) { tempTarget in
                 tempTargetView(for: tempTarget)
+                    // A single `.swipeActions` call: SwiftUI does not merge two calls for the
+                    // same edge, so a second call would silently replace the first instead of
+                    // adding to it.
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        actionButtonsForTempTargets(for: tempTarget, deleteRole: nil)
+                        Button(role: .destructive) {
+                            Task { await state.cancelScheduledTempTarget(tempTarget.objectID) }
+                        } label: {
+                            Label(String(localized: "Cancel"), systemImage: "xmark.circle.fill")
+                        }
+                        Button {
+                            selectedTempTarget = tempTarget
+                            state.showTempTargetEditSheet = true
+                        } label: {
+                            Label("Edit", systemImage: "pencil")
+                        }
+                        .tint(.blue)
                     }
             }
             .listRowBackground(Color.chart)
         } header: {
             Text("Scheduled Temp Targets")
         }
+    }
+
+    private func formattedScheduledTempTargetTime(for tempTarget: TempTargetStored) -> String {
+        guard let date = tempTarget.date else { return "" }
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return formatter.string(from: date)
     }
 
     private var tempTargetPresets: some View {
@@ -37,10 +94,10 @@ extension Adjustments.RootView {
                     requestTempTargetPresetActivation(preset)
                 }
                 .contextMenu {
-                    actionButtonsForTempTargets(for: preset)
+                    actionButtonsForTempTargets(for: preset, showScheduleAction: true)
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    actionButtonsForTempTargets(for: preset, deleteRole: nil)
+                    actionButtonsForTempTargets(for: preset, deleteRole: nil, showScheduleAction: true)
                 }
             }
             .onMove(perform: state.reorderTempTargets)
@@ -67,7 +124,8 @@ extension Adjustments.RootView {
 
     private func actionButtonsForTempTargets(
         for tempTarget: TempTargetStored,
-        deleteRole: ButtonRole? = .destructive
+        deleteRole: ButtonRole? = .destructive,
+        showScheduleAction: Bool = false
     ) -> some View {
         Group {
             Button(role: deleteRole) {
@@ -83,6 +141,16 @@ extension Adjustments.RootView {
                 Label("Edit", systemImage: "pencil")
             }
             .tint(.blue)
+            // Only offered from the Preset list — a row already in `scheduledTempTargets` is
+            // itself the scheduled entry, so scheduling it again would be meaningless.
+            if showScheduleAction {
+                Button {
+                    selectedTempTarget = tempTarget
+                    state.showTempTargetEditSheet = true
+                } label: {
+                    Label(String(localized: "Schedule"), systemImage: "clock")
+                }
+            }
         }
     }
 

@@ -16,6 +16,9 @@ enum AdjustmentSource: String {
     case remote
     case shortcut
     case watch
+    /// A previously scheduled Override or Temp Target activated by `ScheduledOverrideManager`'s
+    /// catch-up on the glucose pulse, rather than by a person acting in the moment.
+    case scheduled
 }
 
 struct AdjustmentSummary: Equatable {

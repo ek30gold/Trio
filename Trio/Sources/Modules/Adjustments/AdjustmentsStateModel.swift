@@ -30,6 +30,7 @@ extension Adjustments {
         var overrideName: String = ""
         var isPreset: Bool = false
         var overridePresets: [OverrideStored] = []
+        var scheduledOverrides: [OverrideStored] = []
         var advancedSettings: Bool = false
         var isfAndCr: Bool = true
         var isf: Bool = true
@@ -94,6 +95,8 @@ extension Adjustments {
                     group.addTask { self.setupTempTargetPresetsArray() }
                     group.addTask { self.updateLatestOverrideConfiguration() }
                     group.addTask { self.updateLatestTempTargetConfiguration() }
+                    group.addTask { self.setupScheduledOverridesArray() }
+                    group.addTask { self.setupScheduledTempTargetsArray() }
                 }
             }
         }
@@ -207,13 +210,19 @@ extension Adjustments.StateModel {
     }
 
     /// Handles Override configuration updates.
+    ///
+    /// Also refreshes the scheduled list: this notification is what `AdjustmentManager` posts
+    /// after `ScheduledOverrideManager`'s catch-up activates (or the app drops) a scheduled
+    /// Override, so a banner for one that just started or was skipped does not linger on screen.
     @objc private func handleOverrideConfigurationUpdate() {
         updateLatestOverrideConfiguration()
+        setupScheduledOverridesArray()
     }
 
-    /// Handles Temp Target configuration updates.
+    /// Handles Temp Target configuration updates. See `handleOverrideConfigurationUpdate`.
     @objc private func handleTempTargetConfigurationUpdate() {
         updateLatestTempTargetConfiguration()
+        setupScheduledTempTargetsArray()
     }
 }
 

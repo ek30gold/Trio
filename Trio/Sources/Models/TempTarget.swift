@@ -12,6 +12,10 @@ struct TempTarget: JSON, Identifiable, Equatable, Hashable {
     let isPreset: Bool?
     var enabled: Bool?
     let halfBasalTarget: Decimal?
+    /// True only for a Temp Target scheduled to start later that has not started yet. Not part of
+    /// `CodingKeys`, so it is never persisted to the oref JSON file — it is a Core Data-only concept
+    /// consumed by `TempTargetsStorage` and the scheduling UI.
+    var isScheduled: Bool = false
 
     static let local = "Trio"
     static let custom = "Temp Target"
