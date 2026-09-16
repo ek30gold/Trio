@@ -438,6 +438,17 @@ extension MainChartView {
                         .position(x: dotX, y: y)
                 }
             }
+        } else if let selection {
+            // No reading resolves here: a scrub past the newest reading, into the forecast
+            // cone. The selection is still real, so keep the vertical indicator on it - the
+            // readout row is already showing oref's projections for this exact case.
+            let x = xPosition(for: selection)
+            if x >= 0, x <= viewportWidth {
+                Rectangle()
+                    .fill(Color.tabBar)
+                    .frame(width: 2, height: stackHeight)
+                    .position(x: x, y: stackHeight / 2)
+            }
         }
     }
 }
