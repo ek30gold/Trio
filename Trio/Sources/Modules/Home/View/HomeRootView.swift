@@ -101,27 +101,6 @@ extension Home {
                 chartInfoButton
                     .offset(x: 0, y: -18)
             }
-            .overlay(alignment: .topTrailing) {
-                // borderless capsule (not a control); centered in the basal
-                // pane band so it clears the y-axis labels on every device size
-                if let rate = currentBasalRateLabel {
-                    Text(rate)
-                        .font(.system(size: 14, weight: .semibold))
-                        .fontDesign(.rounded)
-                        .foregroundStyle(Color.insulin)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .glassMaterialFill(Capsule())
-                        .frame(height: chartHeight * 0.10)
-                        .padding(.trailing, 16)
-                }
-            }
-        }
-
-        private var currentBasalRateLabel: String? {
-            guard let rate = state.tempBasals.last?.tempBasal?.rate else { return nil }
-            let value = Formatter.decimalFormatterWithTwoFractionDigits.string(from: rate) ?? "\(rate)"
-            return value + String(localized: " U/hr", comment: "Unit per hour with space")
         }
 
         @ViewBuilder private var chartInfoButton: some View {
