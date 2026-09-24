@@ -44,8 +44,9 @@ final class NotLoopingMonitor: Injectable {
         trioAlertManager: TrioAlertManager,
         delayMinutes: @escaping () -> Int = { DeviceAlertsStore.defaultNotLoopingDelayMinutes }
     ) {
-        self.trioAlertManager = trioAlertManager
+        // Plain stored lets first — assigning the `@Injected` wrapper touches `self`.
         self.delayMinutes = delayMinutes
+        self.trioAlertManager = trioAlertManager
         subscribe(to: loopDates)
     }
 
