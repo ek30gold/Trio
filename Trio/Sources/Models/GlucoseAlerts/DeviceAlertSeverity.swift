@@ -22,6 +22,15 @@ enum DeviceAlertSeverity: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    /// Inverse of `init(level:)` — the catalog level a tier stands for.
+    var interruptionLevel: Alert.InterruptionLevel {
+        switch self {
+        case .critical: return .critical
+        case .timeSensitive: return .timeSensitive
+        case .normal: return .active
+        }
+    }
+
     var displayName: String {
         switch self {
         case .critical: return String(localized: "Critical")

@@ -31,11 +31,16 @@ enum AlertColdStartReplay {
         return entries.filter { seen.insert("\($0.managerIdentifier).\($0.alertIdentifier)").inserted }
     }
 
+    /// `tierFor` resolves a catalog entry's effective tier (catalog default or
+    /// the user's per-alert override); production passes
+    /// `DeviceAlertsStore.shared.tier(for:)`. It drives both the replayed
+    /// level and the tier-snooze gate.
     static func decision(
         for entry: AlertEntry,
         now: Date,
         isTierSnoozed: (DeviceAlertSeverity) -> Bool,
-        isMuted: Bool
+        isMuted: Bool,
+        tierFor: (Alert.CatalogEntry) -> DeviceAlertSeverity? = { DeviceAlertSeverity(level: $0.interruptionLevel) }
     ) -> Decision {
         if GlucoseAlertType(slug: entry.alertIdentifier) != nil { return .acknowledgeSilently }
 
@@ -54,15 +59,15 @@ enum AlertColdStartReplay {
             alertIdentifier: entry.alertIdentifier
         )
         let catalogEntry = AlertCatalogRegistry.lookup(identifier)
-        let level = catalogEntry?.interruptionLevel
+        let catalogTier = catalogEntry.flatMap(tierFor)
+        let level = catalogTier?.interruptionLevel
             ?? entry.primitiveInterruptionLevel
             .flatMap { Alert.InterruptionLevel(storedValue: NSDecimalNumber(decimal: $0)) }
             ?? .timeSensitive
 
         // Same gates as issueAlert: tier snooze for catalog-known device
         // alerts, global mute for everything non-critical.
-        if let tier = DeviceAlertSeverity(level: level),
-           catalogEntry != nil,
+        if let tier = catalogTier,
            tier != .critical,
            isTierSnoozed(tier)
         {

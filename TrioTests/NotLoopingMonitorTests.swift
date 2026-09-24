@@ -141,4 +141,51 @@ final class SpyAlertManager: TrioAlertManager {
 
         _ = monitor
     }
+
+    @Test("Custom delayMinutes drives both the trigger interval and body text")
+    func customDelayMinutesDrivesTriggerAndBody() {
+        let subject = PassthroughSubject<Date, Never>()
+        let spy = SpyAlertManager()
+        let monitor = NotLoopingMonitor(
+            loopDates: subject.eraseToAnyPublisher(),
+            trioAlertManager: spy,
+            delayMinutes: { 60 }
+        )
+
+        subject.send(Date())
+
+        guard let issued = spy.issuedAlerts.first else {
+            Issue.record("expected an issued alert")
+            return
+        }
+        #expect(issued.trigger == .delayed(interval: 3600))
+        #expect(issued.backgroundContent.body.contains("60"))
+
+        _ = monitor
+    }
+
+    @Test("delayMinutes closure is re-read on every reschedule")
+    func delayMinutesIsReReadOnEveryReschedule() {
+        final class Box { var value = 20 }
+        let box = Box()
+        let subject = PassthroughSubject<Date, Never>()
+        let spy = SpyAlertManager()
+        let monitor = NotLoopingMonitor(
+            loopDates: subject.eraseToAnyPublisher(),
+            trioAlertManager: spy,
+            delayMinutes: { box.value }
+        )
+
+        subject.send(Date())
+        box.value = 90
+        subject.send(Date())
+
+        guard let lastIssued = spy.issuedAlerts.last else {
+            Issue.record("expected an issued alert")
+            return
+        }
+        #expect(lastIssued.trigger == .delayed(interval: 5400))
+
+        _ = monitor
+    }
 }

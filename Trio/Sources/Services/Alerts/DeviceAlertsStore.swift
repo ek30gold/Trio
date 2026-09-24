@@ -2,33 +2,78 @@ import Combine
 import Foundation
 import LoopKit
 
+/// Catalog concepts whose tier the user may move between Critical,
+/// Time-Sensitive and Normal. Trio-status alerts only — pump hardware
+/// alarms (occlusion, reservoir empty, fault, battery empty) are
+/// deliberately absent and always stay at their catalog tier.
+enum AdjustableAlert: String, CaseIterable, Codable, Identifiable {
+    case notLooping
+    case glucoseDataStale
+    case algorithmError
+
+    var id: String { rawValue }
+
+    init?(concept: Alert.CatalogConcept) {
+        switch concept {
+        case .notLooping: self = .notLooping
+        case .glucoseDataStale: self = .glucoseDataStale
+        case .algorithmError: self = .algorithmError
+        default: return nil
+        }
+    }
+
+    var concept: Alert.CatalogConcept {
+        switch self {
+        case .notLooping: return .notLooping
+        case .glucoseDataStale: return .glucoseDataStale
+        case .algorithmError: return .algorithmError
+        }
+    }
+}
+
 /// Persists a flat list of `[DeviceAlertSeverityConfig]` to `UserDefaults`.
 /// Multiple configs per severity tier are allowed — each with its own
 /// `activeOption` so users can vary behavior between day and night.
 ///
 /// Seeds three default configs (one per tier, all `activeOption: .always`)
 /// on first launch so every severity has a baseline that always matches.
+///
+/// Also stores per-alert tier overrides for `AdjustableAlert`s and the
+/// Not Looping alarm delay.
 final class DeviceAlertsStore: ObservableObject {
     static let shared = DeviceAlertsStore()
 
     @Published var configs: [DeviceAlertSeverityConfig]
     /// Per-tier snooze expirations keyed by `DeviceAlertSeverity.rawValue`.
     @Published var tierSnoozes: [String: Date]
+    /// User-chosen tier per `AdjustableAlert.rawValue`. Absent key = catalog default.
+    @Published private(set) var tierOverrides: [String: DeviceAlertSeverity]
+    /// Minutes without a successful loop before the Not Looping alarm fires.
+    @Published private(set) var notLoopingDelayMinutes: Int
+
+    static let notLoopingDelayOptions: [Int] = [20, 30, 45, 60, 90, 120]
+    static let defaultNotLoopingDelayMinutes = 20
 
     private let defaults: UserDefaults
     private let configsKey: String
     private let snoozesKey: String
+    private let overridesKey: String
+    private let delayKey: String
 
     private var subscriptions = Set<AnyCancellable>()
 
     init(
         defaults: UserDefaults = .standard,
         configsKey: String = "trio.deviceAlertSeverityConfigs.v1",
-        snoozesKey: String = "trio.deviceAlertTierSnoozes.v1"
+        snoozesKey: String = "trio.deviceAlertTierSnoozes.v1",
+        overridesKey: String = "trio.deviceAlertTierOverrides.v1",
+        delayKey: String = "trio.notLoopingDelayMinutes.v1"
     ) {
         self.defaults = defaults
         self.configsKey = configsKey
         self.snoozesKey = snoozesKey
+        self.overridesKey = overridesKey
+        self.delayKey = delayKey
         let loaded = Self.decode([DeviceAlertSeverityConfig].self, from: defaults, key: configsKey) ?? []
         var seeded = loaded
         for severity in DeviceAlertSeverity.allCases
@@ -39,6 +84,16 @@ final class DeviceAlertsStore: ObservableObject {
         configs = Self.sorted(seeded)
         let snoozes = Self.decode([String: Date].self, from: defaults, key: snoozesKey) ?? [:]
         tierSnoozes = snoozes.filter { $0.value > Date() }
+        // Drop keys that aren't adjustable alerts so stale or foreign data
+        // can never re-tier a locked pump alarm.
+        let overrides = Self.decode([String: DeviceAlertSeverity].self, from: defaults, key: overridesKey) ?? [:]
+        tierOverrides = overrides.filter { AdjustableAlert(rawValue: $0.key) != nil }
+        let delay = Self.decode(Int.self, from: defaults, key: delayKey)
+        if let delay, Self.notLoopingDelayOptions.contains(delay) {
+            notLoopingDelayMinutes = delay
+        } else {
+            notLoopingDelayMinutes = Self.defaultNotLoopingDelayMinutes
+        }
         bind()
     }
 
@@ -68,6 +123,59 @@ final class DeviceAlertsStore: ObservableObject {
             .removeDuplicates()
             .sink { [weak self] value in self?.encode(value, to: self?.snoozesKey ?? "") }
             .store(in: &subscriptions)
+        $tierOverrides
+            .dropFirst()
+            .removeDuplicates()
+            .sink { [weak self] value in self?.encode(value, to: self?.overridesKey ?? "") }
+            .store(in: &subscriptions)
+        $notLoopingDelayMinutes
+            .dropFirst()
+            .removeDuplicates()
+            .sink { [weak self] value in self?.encode(value, to: self?.delayKey ?? "") }
+            .store(in: &subscriptions)
+    }
+
+    // MARK: - Per-alert tier overrides
+
+    /// Catalog default tier for an adjustable alert (first matching registry entry).
+    func defaultTier(for alert: AdjustableAlert) -> DeviceAlertSeverity {
+        // Fall back to .critical if the entry is somehow missing — the safest tier.
+        guard let entry = AlertCatalogRegistry.entries.first(where: { $0.concept == alert.concept }),
+              let tier = DeviceAlertSeverity(level: entry.interruptionLevel)
+        else { return .critical }
+        return tier
+    }
+
+    /// Effective tier: user override if set, else catalog default.
+    func tier(for alert: AdjustableAlert) -> DeviceAlertSeverity {
+        tierOverrides[alert.rawValue] ?? defaultTier(for: alert)
+    }
+
+    /// Effective tier for any catalog entry. Non-adjustable concepts always
+    /// return their catalog tier — this is the single source of truth every
+    /// routing path must use instead of `DeviceAlertSeverity(level: entry.interruptionLevel)`.
+    func tier(for entry: Alert.CatalogEntry) -> DeviceAlertSeverity? {
+        if let adjustable = AdjustableAlert(concept: entry.concept),
+           let override = tierOverrides[adjustable.rawValue]
+        {
+            return override
+        }
+        return DeviceAlertSeverity(level: entry.interruptionLevel)
+    }
+
+    /// Setting the catalog default clears the override (keeps storage minimal).
+    func setTier(_ tier: DeviceAlertSeverity, for alert: AdjustableAlert) {
+        if tier == defaultTier(for: alert) {
+            tierOverrides.removeValue(forKey: alert.rawValue)
+        } else {
+            tierOverrides[alert.rawValue] = tier
+        }
+    }
+
+    /// Ignores values not in `notLoopingDelayOptions`.
+    func setNotLoopingDelay(minutes: Int) {
+        guard Self.notLoopingDelayOptions.contains(minutes) else { return }
+        notLoopingDelayMinutes = minutes
     }
 
     // MARK: - Lookup

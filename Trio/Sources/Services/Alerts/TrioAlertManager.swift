@@ -218,10 +218,11 @@ final class BaseTrioAlertManager: TrioAlertManager, Injectable {
         // passed through with the level and sound its producer chose.
         let effective: Alert
         if let entry = AlertCatalogRegistry.lookup(alert.identifier) {
-            // Tier comes from the catalog, never from the post-override
-            // level: a Time-Sensitive alarm with "Override Silence & Focus"
-            // on still snoozes and configures as Time-Sensitive.
-            guard let tier = DeviceAlertSeverity(level: entry.interruptionLevel) else { return }
+            // Tier comes from the catalog or the user's per-alert override,
+            // never from the post-override level: a Time-Sensitive alarm with
+            // "Override Silence & Focus" on still snoozes and configures as
+            // Time-Sensitive.
+            guard let tier = DeviceAlertsStore.shared.tier(for: entry) else { return }
 
             // Per-tier snooze. Critical tier ignores snooze.
             if tier != .critical, DeviceAlertsStore.shared.isTierSnoozed(tier, at: now) {
@@ -283,9 +284,12 @@ final class BaseTrioAlertManager: TrioAlertManager, Injectable {
     /// gives a pump/CGM alarm the tone the user picked — and what engages
     /// `CriticalAlertAudioPlayer`, which needs a filename to play.
     /// Static so tests can exercise it without the Swinject graph.
+    /// `config` must be selected for the entry's effective tier, so
+    /// `config.severity` is that tier. `entry` is unused and kept only so
+    /// existing call sites compile unchanged.
     static func applyDeviceSeverityConfig(
         _ config: DeviceAlertSeverityConfig,
-        entry: Alert.CatalogEntry,
+        entry _: Alert.CatalogEntry,
         to alert: Alert
     ) -> Alert {
         Alert(
@@ -293,10 +297,10 @@ final class BaseTrioAlertManager: TrioAlertManager, Injectable {
             foregroundContent: alert.foregroundContent,
             backgroundContent: alert.backgroundContent,
             trigger: alert.trigger,
-            // Escalate only — the catalog level is the floor, so the override
-            // toggle can't demote a Critical alarm or promote a Normal one
-            // past what the catalog says it is.
-            interruptionLevel: config.overridesSilenceAndDND ? .critical : entry.interruptionLevel,
+            // Escalate only — the effective tier's level is the floor, so the
+            // override toggle can't demote a Critical alarm or promote a
+            // Normal one past its (catalog or user-chosen) tier.
+            interruptionLevel: config.overridesSilenceAndDND ? .critical : config.severity.interruptionLevel,
             sound: config.playsSound ? .sound(name: config.soundFilename) : nil,
             metadata: alert.metadata
         )
@@ -331,7 +335,8 @@ final class BaseTrioAlertManager: TrioAlertManager, Injectable {
                 for: entry,
                 now: now,
                 isTierSnoozed: { DeviceAlertsStore.shared.isTierSnoozed($0, at: now) },
-                isMuted: muted
+                isMuted: muted,
+                tierFor: { DeviceAlertsStore.shared.tier(for: $0) }
             ) {
             case let .replay(alert):
                 debug(.service, "TrioAlertManager replaying \(alert.identifier.value)")
@@ -510,7 +515,7 @@ extension BaseTrioAlertManager: TrioModalAlertResponder, TrioUserNotificationAle
                 observer.snoozeGlucoseType(glucoseType, until: untilDate)
             }
         } else if let entry = AlertCatalogRegistry.lookup(identifier),
-                  let tier = DeviceAlertSeverity(level: entry.interruptionLevel),
+                  let tier = DeviceAlertsStore.shared.tier(for: entry),
                   tier != .critical
         {
             DeviceAlertsStore.shared.snoozeTier(tier, until: untilDate)
@@ -530,7 +535,7 @@ extension BaseTrioAlertManager: TrioModalAlertResponder, TrioUserNotificationAle
             liveAlerts.compactMap { id, _ in
                 guard id != excluding,
                       let entry = AlertCatalogRegistry.lookup(id),
-                      DeviceAlertSeverity(level: entry.interruptionLevel) == tier
+                      DeviceAlertsStore.shared.tier(for: entry) == tier
                 else { return nil }
                 return id
             }

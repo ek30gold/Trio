@@ -33,9 +33,19 @@ import Testing
     private func decide(
         _ entry: AlertEntry,
         tierSnoozed: Bool = false,
-        muted: Bool = false
+        muted: Bool = false,
+        tierFor: ((Alert.CatalogEntry) -> DeviceAlertSeverity?)? = nil
     ) -> AlertColdStartReplay.Decision {
-        AlertColdStartReplay.decision(
+        if let tierFor {
+            return AlertColdStartReplay.decision(
+                for: entry,
+                now: now,
+                isTierSnoozed: { _ in tierSnoozed },
+                isMuted: muted,
+                tierFor: tierFor
+            )
+        }
+        return AlertColdStartReplay.decision(
             for: entry,
             now: now,
             isTierSnoozed: { _ in tierSnoozed },
@@ -115,6 +125,26 @@ import Testing
         #expect(decide(entry(), tierSnoozed: true) == .skip)
         let critical = entry(manager: "trio.aps", alert: "loop.notActive", issuedAgo: 60)
         if case .replay = decide(critical, tierSnoozed: true) {} else {
+            Issue.record("critical should pierce tier snooze")
+        }
+    }
+
+    @Test("User tier override sets the replayed level") func tierOverrideSetsLevel() {
+        // loop.notActive is catalogued .critical; user moved it to Time-Sensitive.
+        let notLooping = entry(manager: "trio.aps", alert: "loop.notActive", level: 3)
+        let decision = decide(notLooping, tierFor: { _ in .timeSensitive })
+        guard case let .replay(alert) = decision else {
+            Issue.record("expected replay, got \(decision)")
+            return
+        }
+        #expect(alert.interruptionLevel == .timeSensitive)
+    }
+
+    @Test("Alert moved off Critical obeys its new tier's snooze") func tierOverrideObeysSnooze() {
+        let notLooping = entry(manager: "trio.aps", alert: "loop.notActive", level: 3)
+        #expect(decide(notLooping, tierSnoozed: true, tierFor: { _ in .timeSensitive }) == .skip)
+        // Control: at its catalog Critical tier the same entry pierces snooze.
+        if case .replay = decide(notLooping, tierSnoozed: true) {} else {
             Issue.record("critical should pierce tier snooze")
         }
     }

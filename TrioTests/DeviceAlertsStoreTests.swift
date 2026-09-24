@@ -7,17 +7,35 @@ import Testing
 @Suite("Trio Alerts: DeviceAlertsStore variant precedence", .serialized) struct DeviceAlertsStoreTests {
     /// Each test gets a unique suite name so UserDefaults state can't leak
     /// between tests in parallel runs.
-    private static func makeStore(seed: [DeviceAlertSeverityConfig]? = nil) -> DeviceAlertsStore {
+    private static func makeStore(
+        seed: [DeviceAlertSeverityConfig]? = nil,
+        overridesSeed: [String: DeviceAlertSeverity]? = nil,
+        delaySeed: Int? = nil
+    ) -> DeviceAlertsStore {
         let suiteName = "DeviceAlertsStoreTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         let configsKey = "configs.\(suiteName)"
         let snoozesKey = "snoozes.\(suiteName)"
+        let overridesKey = "overrides.\(suiteName)"
+        let delayKey = "delay.\(suiteName)"
         if let seed {
             let data = try? JSONEncoder().encode(seed)
             defaults.set(data, forKey: configsKey)
         }
-        return DeviceAlertsStore(defaults: defaults, configsKey: configsKey, snoozesKey: snoozesKey)
+        if let overridesSeed {
+            defaults.set(try? JSONEncoder().encode(overridesSeed), forKey: overridesKey)
+        }
+        if let delaySeed {
+            defaults.set(try? JSONEncoder().encode(delaySeed), forKey: delayKey)
+        }
+        return DeviceAlertsStore(
+            defaults: defaults,
+            configsKey: configsKey,
+            snoozesKey: snoozesKey,
+            overridesKey: overridesKey,
+            delayKey: delayKey
+        )
     }
 
     @Test("Fresh store seeds one .always config per severity") func freshSeed() {
@@ -145,13 +163,21 @@ import Testing
     /// Builds a unique UserDefaults suite (UUID), wipes its persistent domain,
     /// and returns the defaults plus the derived keys — so a test can seed or
     /// reload across multiple stores on the same backing store.
-    private static func makeSuite() -> (defaults: UserDefaults, configsKey: String, snoozesKey: String) {
+    private static func makeSuite() -> (
+        defaults: UserDefaults,
+        configsKey: String,
+        snoozesKey: String,
+        overridesKey: String,
+        delayKey: String
+    ) {
         let suiteName = "DeviceAlertsStoreTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         let configsKey = "configs.\(suiteName)"
         let snoozesKey = "snoozes.\(suiteName)"
-        return (defaults, configsKey, snoozesKey)
+        let overridesKey = "overrides.\(suiteName)"
+        let delayKey = "delay.\(suiteName)"
+        return (defaults, configsKey, snoozesKey, overridesKey, delayKey)
     }
 
     @Test("Snoozed tier is active before its expiry") func snoozeTimeSensitiveActiveBeforeExpiry() {
@@ -245,6 +271,97 @@ import Testing
         let store = Self.makeStore()
         store.snoozeTier(.critical, until: now.addingTimeInterval(600))
         #expect(store.isTierSnoozed(.critical, at: now))
+    }
+
+    // MARK: - Per-alert tier overrides
+
+    private static let notLoopingIdentifier = Alert.Identifier(
+        managerIdentifier: "trio.aps",
+        alertIdentifier: "loop.notActive"
+    )
+
+    @Test("Fresh store has no overrides and catalog-default tiers") func freshOverridesAndDelay() {
+        let store = Self.makeStore()
+        #expect(store.tierOverrides.isEmpty)
+        #expect(store.tier(for: .notLooping) == .critical)
+        #expect(store.tier(for: .glucoseDataStale) == .timeSensitive)
+        #expect(store.tier(for: .algorithmError) == .normal)
+        #expect(store.notLoopingDelayMinutes == 20)
+    }
+
+    @Test("Override changes the effective tier of the catalog entry") func overrideChangesEntryTier() throws {
+        let store = Self.makeStore()
+        let entry = try #require(AlertCatalogRegistry.lookup(Self.notLoopingIdentifier))
+        #expect(store.tier(for: entry) == .critical, "Precondition: catalog tier")
+
+        store.setTier(.timeSensitive, for: .notLooping)
+        #expect(store.tier(for: .notLooping) == .timeSensitive)
+        #expect(store.tier(for: entry) == .timeSensitive)
+    }
+
+    @Test("Setting the catalog default clears the override") func settingDefaultClearsOverride() {
+        let store = Self.makeStore()
+        store.setTier(.normal, for: .notLooping)
+        #expect(store.tierOverrides["notLooping"] == .normal)
+
+        store.setTier(.critical, for: .notLooping)
+        #expect(store.tierOverrides["notLooping"] == nil)
+        #expect(store.tier(for: .notLooping) == .critical)
+    }
+
+    @Test("Locked pump alarm keeps its catalog tier") func lockedConceptIgnoresOverrides() throws {
+        let occlusion = Alert.Identifier(managerIdentifier: "Dana", alertIdentifier: "occlusion")
+        let entry = try #require(AlertCatalogRegistry.lookup(occlusion))
+        #expect(AdjustableAlert(concept: entry.concept) == nil, "Precondition: occlusion is not adjustable")
+
+        let store = Self.makeStore()
+        for alert in AdjustableAlert.allCases {
+            store.setTier(.normal, for: alert)
+        }
+        #expect(store.tier(for: entry) == .critical)
+    }
+
+    @Test("Overrides and delay persist across a store reload") func overridesAndDelayPersist() {
+        let suite = Self.makeSuite()
+        let store1 = DeviceAlertsStore(
+            defaults: suite.defaults,
+            configsKey: suite.configsKey,
+            snoozesKey: suite.snoozesKey,
+            overridesKey: suite.overridesKey,
+            delayKey: suite.delayKey
+        )
+        store1.setTier(.normal, for: .glucoseDataStale)
+        store1.setNotLoopingDelay(minutes: 45)
+
+        let store2 = DeviceAlertsStore(
+            defaults: suite.defaults,
+            configsKey: suite.configsKey,
+            snoozesKey: suite.snoozesKey,
+            overridesKey: suite.overridesKey,
+            delayKey: suite.delayKey
+        )
+        #expect(store2.tier(for: .glucoseDataStale) == .normal)
+        #expect(store2.tierOverrides == ["glucoseDataStale": .normal])
+        #expect(store2.notLoopingDelayMinutes == 45)
+    }
+
+    @Test("Not Looping delay accepts only listed options") func delayRejectsUnlistedValues() {
+        let store = Self.makeStore()
+        store.setNotLoopingDelay(minutes: 37)
+        #expect(store.notLoopingDelayMinutes == 20)
+        store.setNotLoopingDelay(minutes: 60)
+        #expect(store.notLoopingDelayMinutes == 60)
+    }
+
+    @Test("Unlisted stored delay falls back to the default") func storedGarbageDelayFallsBack() {
+        let store = Self.makeStore(delaySeed: 37)
+        #expect(store.notLoopingDelayMinutes == DeviceAlertsStore.defaultNotLoopingDelayMinutes)
+    }
+
+    @Test("Stored override for a non-adjustable key is dropped on load") func garbageOverrideKeyDropped() {
+        let store = Self.makeStore(overridesSeed: ["occlusion": .normal, "algorithmError": .critical])
+        #expect(store.tierOverrides["occlusion"] == nil)
+        #expect(store.tierOverrides == ["algorithmError": .critical])
     }
 }
 
