@@ -12234,6 +12234,9 @@
         }
       }
     },
+    "%d min" : {
+
+    },
     "%d minutes" : {
       "comment" : "Accessibility: pod time",
       "localizations" : {
@@ -40178,6 +40181,9 @@
         }
       }
     },
+    "Alert After" : {
+
+    },
     "Alert Identifier" : {
       "comment" : "The name of the parameter for the alert identifier in the StopCriticalAlertIntent.",
       "localizations" : {
@@ -50594,6 +50600,9 @@
           }
         }
       }
+    },
+    "Applies To" : {
+
     },
     "Applies To (Cannot be changed)" : {
       "localizations" : {
@@ -77883,6 +77892,9 @@
         }
       }
     },
+    "Changes take effect after Trio's next successful loop." : {
+
+    },
     "Chapter %1$d of %2$d, %3$@" : {
       "comment" : "Accessibility: onboarding progress",
       "localizations" : {
@@ -99351,6 +99363,9 @@
           }
         }
       }
+    },
+    "Default: %@. This alert uses the chosen tier's sound, Focus override, day/night window and snooze." : {
+
     },
     "Default: 0 units" : {
       "localizations" : {
@@ -165527,6 +165542,9 @@
         }
       }
     },
+    "If this tier is snoozed, disabled, or silenced, you may not be told that Trio has stopped looping." : {
+
+    },
     "If toggled, Insulin will be added to IOB but it will not be delivered" : {
       "localizations" : {
         "bg" : {
@@ -184379,6 +184397,9 @@
           }
         }
       }
+    },
+    "Locked" : {
+
     },
     "Log ${carbQuantity} at ${dateAdded}" : {
       "localizations" : {
@@ -288949,6 +288970,9 @@
         }
       }
     },
+    "Tap an unlocked alert to move it to another tier. Pump and sensor alarms keep their built-in tier." : {
+
+    },
     "Tap and hold a bar in the chart to reveal more details. Swipe to scroll through time." : {
       "localizations" : {
         "bg" : {
@@ -310261,6 +310285,9 @@
           }
         }
       }
+    },
+    "Tier" : {
+
     },
     "Time" : {
       "comment" : "Time basal profile",
