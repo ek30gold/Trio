@@ -20,7 +20,7 @@ extension Adjustments.RootView {
     /// One banner per scheduled Override, so a conflicting second one (blocked at scheduling time)
     /// can never hide the first.
     private var scheduledOverrideBanner: some View {
-        ForEach(state.scheduledOverrides) { override in
+        ForEach(state.scheduledOverrides, id: \.objectID) { override in
             Section {
                 HStack {
                     Text(
@@ -53,7 +53,7 @@ extension Adjustments.RootView {
 
     private var scheduledOverridesSection: some View {
         Section {
-            ForEach(state.scheduledOverrides) { override in
+            ForEach(state.scheduledOverrides, id: \.objectID) { override in
                 HStack {
                     Text(override.name ?? String(localized: "Scheduled Override"))
                     Spacer()

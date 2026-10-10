@@ -20,7 +20,7 @@ extension Adjustments.RootView {
     /// One banner per scheduled Temp Target, so a conflicting second one (blocked at scheduling
     /// time) can never hide the first.
     private var scheduledTempTargetBanner: some View {
-        ForEach(state.scheduledTempTargets) { tempTarget in
+        ForEach(state.scheduledTempTargets, id: \.objectID) { tempTarget in
             Section {
                 HStack {
                     Text(
@@ -53,7 +53,7 @@ extension Adjustments.RootView {
 
     private var scheduledTempTargets: some View {
         Section {
-            ForEach(state.scheduledTempTargets) { tempTarget in
+            ForEach(state.scheduledTempTargets, id: \.objectID) { tempTarget in
                 tempTargetView(for: tempTarget)
                     // A single `.swipeActions` call: SwiftUI does not merge two calls for the
                     // same edge, so a second call would silently replace the first instead of
