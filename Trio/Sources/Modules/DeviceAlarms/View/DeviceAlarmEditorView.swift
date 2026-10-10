@@ -184,7 +184,7 @@ struct AdjustableAlertDetailView: View {
             if alert == .notLooping {
                 Section(
                     header: Text("Alert After"),
-                    footer: Text("Changes take effect after Trio's next successful loop.")
+                    footer: Text(notLoopingDelayFooter)
                 ) {
                     Picker(
                         String(localized: "Alert After"),
@@ -221,12 +221,21 @@ struct AdjustableAlertDetailView: View {
     }
 
     private var defaultTierFooter: String {
-        String(
+        let footer = String(
             format: String(
                 localized: "Default: %@. This alert uses the chosen tier's sound, Focus override, day/night window and snooze."
             ),
             store.defaultTier(for: alert).displayName
         )
+        guard alert == .notLooping else { return footer }
+        return footer + " " +
+            String(localized: "Only the final alarm at 120 minutes moves to this tier. Earlier warnings stay Time-Sensitive.")
+    }
+
+    private var notLoopingDelayFooter: String {
+        String(
+            localized: "Time-Sensitive warnings start after this delay and repeat every 20 minutes until the final alarm, which always fires at 120 minutes."
+        ) + " " + String(localized: "Changes take effect after Trio's next successful loop.")
     }
 
     private func minutesLabel(_ minutes: Int) -> String {

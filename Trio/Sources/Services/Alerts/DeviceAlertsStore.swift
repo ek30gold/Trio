@@ -154,8 +154,13 @@ final class DeviceAlertsStore: ObservableObject {
     /// Effective tier for any catalog entry. Non-adjustable concepts always
     /// return their catalog tier — this is the single source of truth every
     /// routing path must use instead of `DeviceAlertSeverity(level: entry.interruptionLevel)`.
+    ///
+    /// A Not Looping override moves only the final (Critical, 120-minute)
+    /// alarm on the bare `loop.notActive` identifier; the escalation warning
+    /// steps (`loop.notActive.w1` … `w5`) always keep their Time-Sensitive tier.
     func tier(for entry: Alert.CatalogEntry) -> DeviceAlertSeverity? {
         if let adjustable = AdjustableAlert(concept: entry.concept),
+           adjustable != .notLooping || entry.identifier.alertIdentifier == "loop.notActive",
            let override = tierOverrides[adjustable.rawValue]
         {
             return override

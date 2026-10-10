@@ -203,14 +203,20 @@ extension Home.RootView {
         } else {
             // Only display the insulin delivery rate info if the pump is not
             // suspended and is available (e.g., pod is paired & not faulted).
-            if let apsManager = state.apsManager, !apsManager.isSuspended, apsManager.isScheduledBasal != nil {
+            // The rate itself comes from `activeBasalDelivery` (pump history, suspensions and
+            // profile against the real clock), not the newest temp basal, which may have ended.
+            let delivery = state.activeBasalDelivery
+            if let apsManager = state.apsManager, !apsManager.isSuspended, apsManager.isScheduledBasal != nil,
+               delivery != .suspended
+            {
+                let basalString = self.basalString(for: delivery)
                 HStack {
                     Image(systemName: "drop.circle")
                         .font(.callout)
                         .foregroundColor(.insulinTintColor)
-                    if let basalString = self.basalString {
+                    if let basalString {
                         /// Adjust opacity when displaying a scheduled basal rate
-                        let opacity = apsManager.isScheduledBasal == true ? 0.6 : 1.0
+                        let opacity = isScheduledDelivery(delivery) ? 0.6 : 1.0
                         if basalString.count > 5 {
                             Text(basalString)
                                 .font(.callout).fontWeight(.bold).fontDesign(.rounded)
@@ -239,26 +245,25 @@ extension Home.RootView {
         }
     }
 
+    private func isScheduledDelivery(_ delivery: ScheduledBasalInference.Delivery?) -> Bool {
+        if case .scheduled? = delivery { return true }
+        return false
+    }
+
     /// The rate shown in the meal row: the profile's scheduled rate while the pump runs its own
-    /// schedule, otherwise the last temp basal the loop enacted.
-    private var basalString: String? {
-        var rate: NSNumber = 0
+    /// schedule, otherwise the temp basal still running now.
+    private func basalString(for delivery: ScheduledBasalInference.Delivery?) -> String? {
+        let rate: Decimal
         var manualBasalString = ""
 
-        guard let apsManager = state.apsManager else {
+        switch delivery {
+        case .none,
+             .suspended:
             return nil
-        }
-
-        if apsManager.isScheduledBasal == true {
-            guard let scheduledRate = scheduledBasalDeliveryRate(at: Date()) else {
-                return nil
-            }
+        case let .scheduled(scheduledRate):
             rate = scheduledRate
-        } else {
-            guard let lastTempBasal = state.tempBasals.last?.tempBasal, let tempRate = lastTempBasal.rate else {
-                return nil
-            }
-            if apsManager.isManualTempBasal {
+        case let .temp(tempRate):
+            if state.manualTempBasal {
                 manualBasalString = String(
                     localized: " - Manual Basal ⚠️",
                     comment: "Manual Temp basal"
@@ -267,25 +272,10 @@ extension Home.RootView {
             rate = tempRate
         }
 
-        let rateString = Formatter.decimalFormatterWithThreeFractionDigits.string(from: rate) ?? "0"
+        let rateString = Formatter.decimalFormatterWithThreeFractionDigits
+            .string(from: NSDecimalNumber(decimal: rate)) ?? "0"
         return rateString + String(localized: " U/hr", comment: "Unit per hour with space") +
             manualBasalString
-    }
-
-    /// Returns the scheduled basal rate for the current time based on the saved basal scheduled.
-    /// Would be better if in the future BasalDeliveryStatus could be updated to include this info.
-    private func scheduledBasalDeliveryRate(at when: Date) -> NSNumber? {
-        let calendar = Calendar(identifier: .gregorian)
-        // calendar.timeZone = timeZone /// should come from pumpManager in case it's different!
-
-        let hours = calendar.component(.hour, from: when)
-        let minutes = calendar.component(.minute, from: when)
-        let totalMinutes = hours * 60 + minutes
-
-        if let rate = findBasalRateForOffset(for: totalMinutes, in: state.basalProfile) {
-            return NSDecimalNumber(decimal: rate)
-        }
-        return nil
     }
 
     func refreshAlarmsSnooze() {
