@@ -13,6 +13,10 @@ protocol FetchGlucoseManager: SourceInfoProvider {
     func deleteGlucoseSource() async
     func removeCalibrations()
     func newGlucoseFromCgmManager(newGlucose: [BloodGlucose])
+    /// Notes to Nightscout a sensor state without reliable glucose, once per
+    /// state; see `CGMSensorStateLog`. Call on every reading.
+    func reportCGMSensorObservation(_ observation: CGMSensorObservation)
+    func startCGMSensorSession(startedAt: Date)
     var glucoseSource: GlucoseSource? { get }
     var cgmManager: CGMManagerUI? { get }
     var cgmGlucoseSourceType: CGMType { get set }
@@ -46,6 +50,10 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
     @Injected() var calibrationService: CalibrationService!
     @Injected() var trioAlertManager: TrioAlertManager!
     @Injected() var scheduledOverrideManager: ScheduledOverrideManager!
+
+    /// Guarded by `sensorStateLock`.
+    @Persisted(key: "cgmSensorStateLog") private var sensorStateLog = CGMSensorStateLog()
+    private let sensorStateLock = NSRecursiveLock()
 
     private var lifetime = Lifetime()
     private let timer = DispatchTimer(timeInterval: 1.minutes.timeInterval)
@@ -189,6 +197,27 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
         calibrationService.removeAllCalibrations()
     }
 
+    func reportCGMSensorObservation(_ observation: CGMSensorObservation) {
+        let settings = settingsManager.settings
+        guard settings.isUploadEnabled, settings.uploadCGMSensorStates else { return }
+        let pending = sensorStateLock.perform { sensorStateLog.observe(observation) }
+        guard let pending else { return }
+
+        Task {
+            let note = "CGM: " + pending
+            if await nightscoutManager.uploadNoteTreatment(note: note) {
+                debug(.deviceManager, "CGM sensor state uploaded to Nightscout: \(note)")
+            } else {
+                self.sensorStateLock.perform { self.sensorStateLog.uploadFailed(pending) }
+                debug(.deviceManager, "CGM sensor state upload failed, will retry: \(note)")
+            }
+        }
+    }
+
+    func startCGMSensorSession(startedAt: Date) {
+        sensorStateLock.perform { sensorStateLog.startSensor(startedAt: startedAt) }
+    }
+
     @MainActor func deleteGlucoseSource() async {
         cgmManager = nil
         glucoseSource = nil
@@ -279,7 +308,7 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
 
     private func glucoseStoreAndHeartDecision(syncDate: Date, glucose: [BloodGlucose]) async throws {
         // calibration add if required only for sensor
-        let newGlucose = overcalibrate(entries: glucose)
+        let newGlucose = overcalibrate(entries: glucose.filter { $0.sgv != nil })
 
         var filteredByDate: [BloodGlucose] = []
         var filtered: [BloodGlucose] = []
@@ -287,6 +316,13 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
         // Start background task
         var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
         backgroundTaskID = startBackgroundTask(withName: "Glucose Store and Heartbeat Decision")
+
+        // Check if sensor emitted calibrations
+        let calibrations = glucose.filter { $0.mbg != nil }
+        if calibrations.isNotEmpty {
+            debug(.deviceManager, "New calibration found")
+            try await glucoseStorage.storeGlucose(calibrations)
+        }
 
         guard newGlucose.isNotEmpty else {
             endBackgroundTaskSafely(&backgroundTaskID, taskName: "Glucose Store and Heartbeat Decision")
