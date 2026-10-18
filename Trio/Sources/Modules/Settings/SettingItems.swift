@@ -297,6 +297,7 @@ enum SettingItems {
                 "Time in Range Type",
                 "Time in Tight Range (TITR)",
                 "Time in Normoglycemia (TING)",
+                "Home Statistics Range",
                 "X-Axis Interval Step",
                 "Require Adjustments Confirmation"
             ],
@@ -382,7 +383,8 @@ enum SettingItems {
             view: .liveActivitySettings,
             searchContents: [
                 "Enable Live Activity",
-                "Lock Screen Widget Style"
+                "Lock Screen Widget Style",
+                "Widget Configuration"
             ],
             path: ["Notifications", "Live Activity"]
         ),
