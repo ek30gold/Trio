@@ -124,32 +124,11 @@ struct ChartSelectionRow: View {
     let currentGlucoseTarget: Decimal
     let glucoseColorScheme: GlucoseColorScheme
     let isSmoothingEnabled: Bool
-    /// oref's projected IOB / COB / glucose at `selection`, already resolved to display units.
+    /// oref's projected IOB / COB / glucose at `selection`; glucose is in mg/dL (formatted here).
     /// Only ever shown when there is no measured value to show instead — a future scrub only.
     let predictedIOB: Decimal?
     let predictedCOB: Decimal?
     let predictedGlucose: Decimal?
-
-    private var glucoseToDisplay: Decimal? {
-        guard let selectedGlucose else { return nil }
-        return units == .mgdL ? Decimal(selectedGlucose.glucose) : Decimal(selectedGlucose.glucose).asMmolL
-    }
-
-    /// mmol/L is written to one decimal even when it is a whole number — 8 reads as 8.0, the
-    /// way the rest of the app writes it — and both units go through a formatter so the
-    /// decimal separator follows the locale rather than `Decimal.description`'s hard dot.
-    private static let glucoseFormatter: (GlucoseUnits) -> NumberFormatter = { units in
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.locale = .current
-        formatter.minimumFractionDigits = units == .mgdL ? 0 : 1
-        formatter.maximumFractionDigits = units == .mgdL ? 0 : 1
-        return formatter
-    }
-
-    private func glucoseString(_ value: Decimal) -> String {
-        Self.glucoseFormatter(units).string(from: value as NSDecimalNumber) ?? value.description
-    }
 
     /// nil when there is no measured reading: a predicted glucose has no dynamic-color
     /// verdict to give, so it is never mistaken for the real high/low/in-range coloring.
@@ -255,16 +234,16 @@ struct ChartSelectionRow: View {
     /// cone) stands in, under a trend glyph instead of the drop and in neutral, dimmed text
     /// — a projection, not a color-coded verdict on a real number.
     @ViewBuilder private var glucoseGroup: some View {
-        if let selectedGlucose, let glucoseToDisplay, let pointMarkColor {
+        if let selectedGlucose, let pointMarkColor {
             // verbatim: brackets have nothing to translate, and Xcode would otherwise extract
             // them into the string catalog
-            let reading = Text(glucoseString(glucoseToDisplay)).foregroundStyle(pointMarkColor)
+            let reading = Text(Decimal(selectedGlucose.glucose).formatted(for: units)).foregroundStyle(pointMarkColor)
             let smoothed = smoothedToDisplay(for: selectedGlucose).map {
                 (
                     Text(verbatim: "(")
                         + Text(Image(systemName: "sparkles"))
                         + Text(verbatim: " ")
-                        + Text(glucoseString($0))
+                        + Text($0.formatted(for: units))
                         + Text(verbatim: ")")
                 ).foregroundStyle(.secondary)
             }
@@ -278,7 +257,7 @@ struct ChartSelectionRow: View {
             item(
                 icon: "chart.line.uptrend.xyaxis",
                 tint: .secondary,
-                value: Text(glucoseString(predictedGlucose)).foregroundStyle(.secondary)
+                value: Text(predictedGlucose.formatted(for: units)).foregroundStyle(.secondary)
             )
             .opacity(0.6)
         } else {
@@ -286,10 +265,10 @@ struct ChartSelectionRow: View {
         }
     }
 
-    /// The smoothed reading in display units, or nil with smoothing off or no smoothed value.
+    /// The smoothed reading in mg/dL, or nil with smoothing off or no smoothed value.
     private func smoothedToDisplay(for glucose: GlucoseStored) -> Decimal? {
         guard isSmoothingEnabled, let smoothed = glucose.smoothedGlucose else { return nil }
-        return units == .mgdL ? smoothed.decimalValue : smoothed.decimalValue.asMmolL
+        return smoothed.decimalValue
     }
 
     /// One value plus its glyph.

@@ -370,7 +370,7 @@ struct MealPresetView: View {
                 showAddNewPresetSheet.toggle()
                 note = ""
             } catch let error as NSError {
-                debugPrint("\(DebuggingIdentifiers.failed) Failed to save Meal Preset with error: \(error.userInfo)")
+                warning(.treatments, "Saving meal preset failed", error: error)
             }
         }
     }

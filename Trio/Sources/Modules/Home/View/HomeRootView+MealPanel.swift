@@ -76,8 +76,8 @@ extension Home.RootView {
             maxForecast: state.maxForecast,
             anchor: glucoseForecastAnchor
         )
-        let glucose = glucoseMgdL.map { state.units == .mmolL ? $0.asMmolL : $0 }
-        return (iob, cob, glucose)
+        // Left in mg/dL: `ChartSelectionRow` converts via `formatted(for:)`.
+        return (iob, cob, glucoseMgdL)
     }
 
     /// Decays the readout instead of dropping it: readings and determinations have holes, and
@@ -278,18 +278,13 @@ extension Home.RootView {
             manualBasalString
     }
 
-    func refreshAlarmsSnooze() {
-        alarmsSnoozeUntil = UserDefaults.standard
-            .object(forKey: "UserNotificationsManager.snoozeUntilDate") as? Date ?? .distantPast
-    }
-
     /// Bell pill matching the header pills; countdown replaces the label while snoozed.
     @ViewBuilder var alarmsPill: some View {
         // timerDate keeps the countdown ticking
         // measure from now, so calculation is not based off stale tick date
         // cf. https://github.com/nightscout/Trio/issues/1381
-        let isSnoozed = alarmsSnoozeUntil > state.timerDate
-        let remainingMinutes = max(Int(ceil(alarmsSnoozeUntil.timeIntervalSince(max(state.timerDate, Date())) / 60)), 0)
+        let isSnoozed = state.alarmsSnoozeUntil > state.timerDate
+        let remainingMinutes = max(Int(ceil(state.alarmsSnoozeUntil.timeIntervalSince(max(state.timerDate, Date())) / 60)), 0)
 
         Button {
             showSnoozeSheet = true

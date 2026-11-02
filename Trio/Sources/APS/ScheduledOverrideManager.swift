@@ -106,10 +106,7 @@ final class BaseScheduledOverrideManager: ScheduledOverrideManager, Injectable {
                 await activate(winnerID, now: now)
             }
         } catch {
-            debug(
-                .default,
-                "\(DebuggingIdentifiers.failed) Failed to catch up on scheduled overrides: \(error)"
-            )
+            warning(.treatments, "Failed to catch up on scheduled overrides", error: error)
         }
     }
 
@@ -180,15 +177,12 @@ final class BaseScheduledOverrideManager: ScheduledOverrideManager, Injectable {
             }
 
             debug(
-                .default,
+                .treatments,
                 "\(DebuggingIdentifiers.succeeded) Activated scheduled override '\(name)' " +
                     "\(Int(lateness / 60)) min after its scheduled start"
             )
         } catch {
-            debug(
-                .default,
-                "\(DebuggingIdentifiers.failed) Failed to activate due scheduled override: \(error)"
-            )
+            warning(.treatments, "Failed to activate due scheduled override", error: error)
         }
     }
 
@@ -211,7 +205,7 @@ final class BaseScheduledOverrideManager: ScheduledOverrideManager, Injectable {
             }
 
             debug(
-                .default,
+                .treatments,
                 "\(DebuggingIdentifiers.inProgress) Skipped scheduled override '\(name)' — " +
                     "\(Int(now.timeIntervalSince(scheduledStart) / 60)) min late, superseded: \(wasSuperseded)"
             )
@@ -224,10 +218,7 @@ final class BaseScheduledOverrideManager: ScheduledOverrideManager, Injectable {
                 )
             }
         } catch {
-            debug(
-                .default,
-                "\(DebuggingIdentifiers.failed) Failed to drop stale scheduled override: \(error)"
-            )
+            warning(.treatments, "Failed to drop stale scheduled override", error: error)
         }
     }
 
@@ -249,10 +240,7 @@ final class BaseScheduledOverrideManager: ScheduledOverrideManager, Injectable {
                 await activateTempTarget(winnerID, now: now)
             }
         } catch {
-            debug(
-                .default,
-                "\(DebuggingIdentifiers.failed) Failed to catch up on scheduled temp targets: \(error)"
-            )
+            warning(.treatments, "Failed to catch up on scheduled temp targets", error: error)
         }
     }
 
@@ -309,15 +297,12 @@ final class BaseScheduledOverrideManager: ScheduledOverrideManager, Injectable {
             }
 
             debug(
-                .default,
+                .treatments,
                 "\(DebuggingIdentifiers.succeeded) Activated scheduled temp target '\(name)' " +
                     "\(Int(lateness / 60)) min after its scheduled start"
             )
         } catch {
-            debug(
-                .default,
-                "\(DebuggingIdentifiers.failed) Failed to activate due scheduled temp target: \(error)"
-            )
+            warning(.treatments, "Failed to activate due scheduled temp target", error: error)
         }
     }
 
@@ -343,10 +328,7 @@ final class BaseScheduledOverrideManager: ScheduledOverrideManager, Injectable {
                 )
             }
         } catch {
-            debug(
-                .default,
-                "\(DebuggingIdentifiers.failed) Failed to drop stale scheduled temp target: \(error)"
-            )
+            warning(.treatments, "Failed to drop stale scheduled temp target", error: error)
         }
     }
 
