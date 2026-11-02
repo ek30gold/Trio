@@ -6,7 +6,7 @@ import Testing
 @Suite("Plugin Manager Tests", .serialized) struct PluginManagerTests: Injectable {
     let fileStorage = BaseFileStorage()
     @Injected() var pluginManager: PluginManager!
-    let resolver = TrioApp().resolver
+    let resolver = TestApp.makeResolver()
 
     init() {
         injectServices(resolver)
