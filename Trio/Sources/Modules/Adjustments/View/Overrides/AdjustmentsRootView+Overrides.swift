@@ -57,7 +57,8 @@ extension Adjustments.RootView {
                 HStack {
                     Text(override.name ?? String(localized: "Scheduled Override"))
                     Spacer()
-                    Text("Starts in \(formattedTimeRemaining((override.date ?? Date()).timeIntervalSinceNow))")
+                    let untilStart = Duration.seconds(max(0, (override.date ?? Date()).timeIntervalSinceNow))
+                    Text("Starts in \(untilStart.formattedTimeSpan(.largestTwoUnits))")
                         .foregroundStyle(.secondary)
                         .font(.caption)
                 }
