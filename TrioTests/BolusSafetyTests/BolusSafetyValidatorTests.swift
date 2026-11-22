@@ -1,11 +1,12 @@
 import Foundation
+import Swinject
 import Testing
 
 @testable import Trio
 
 @Suite("Bolus Safety Validator Tests") struct BolusSafetyValidatorTests: Injectable {
     @Injected() var validator: BolusSafetyValidator!
-    let resolver = TestApp.makeResolver()
+    let resolver = TrioApp.resolver
 
     init() {
         injectServices(resolver)

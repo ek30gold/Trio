@@ -1,4 +1,5 @@
 import Foundation
+import Swinject
 import Testing
 
 @testable import Trio
@@ -15,7 +16,7 @@ import Testing
     @Injected() var settingsManager: SettingsManager!
     @Injected() var fileStorage: FileStorage!
     @Injected() var apsManager: APSManager!
-    let resolver = TestApp.makeResolver()
+    let resolver = TrioApp.resolver
 
     init() {
         injectServices(resolver)
