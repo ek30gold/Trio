@@ -206,7 +206,7 @@ extension Home.RootView {
             // The rate itself comes from `activeBasalDelivery` (pump history, suspensions and
             // profile against the real clock), not the newest temp basal, which may have ended.
             let delivery = state.activeBasalDelivery
-            if let apsManager = state.apsManager, !apsManager.isSuspended, apsManager.isScheduledBasal != nil,
+            if let apsManager = state.apsManager, !apsManager.isSuspended, state.pumpDisplayState != nil,
                delivery != .suspended
             {
                 let basalString = self.basalString(for: delivery)
