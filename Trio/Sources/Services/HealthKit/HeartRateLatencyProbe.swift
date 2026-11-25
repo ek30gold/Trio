@@ -229,7 +229,8 @@ final class HeartRateLatencyProbe {
     // MARK: - App state tracking
 
     private func trackAppState() {
-        let center = NotificationCenter.default
+        // Trio defines its own `NotificationCenter` protocol, so Foundation's must be named explicitly.
+        let center = Foundation.NotificationCenter.default
         let background = center.addObserver(
             forName: UIApplication.didEnterBackgroundNotification,
             object: nil,
