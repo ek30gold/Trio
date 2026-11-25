@@ -76,6 +76,8 @@ extension Notification.Name {
         _ = resolver.resolve(WatchManager.self)!
         _ = resolver.resolve(ContactImageManager.self)!
         _ = resolver.resolve(HealthKitManager.self)!
+        // STAGE 0 (throwaway): Exercise Nudge heart-rate latency probe. Remove with HeartRateLatencyProbe.swift.
+        HeartRateLatencyProbe.shared.start(resolver: resolver)
         _ = resolver.resolve(GarminManager.self)!
         _ = resolver.resolve(BluetoothStateManager.self)!
         _ = resolver.resolve(PluginManager.self)!
